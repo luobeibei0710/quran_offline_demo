@@ -30,6 +30,7 @@ class VerseMatchCandidate {
     required this.ayahEnd,
     required this.textScore,
     required this.acousticScore,
+    required this.sortScore,
     required this.tokenLength,
     required this.verse,
   });
@@ -46,8 +47,11 @@ class VerseMatchCandidate {
   /// 文本召回得分。
   final double textScore;
 
-  /// CTC 平均负对数似然。
+  /// CTC 平均负对数似然（纯声学证据，用于展示与横向比较）。
   final double acousticScore;
+
+  /// 排序分 = [acousticScore] + 跨度惩罚，仅用于候选排序。
+  final double sortScore;
 
   /// token 数。
   final int tokenLength;
@@ -97,7 +101,7 @@ class VerseMatchResult {
     final best = champion;
     if (best == null) return 0.0;
     if (runnersUp.isEmpty) return 1.0;
-    final margin = runnersUp.first.acousticScore - best.acousticScore;
+    final margin = runnersUp.first.sortScore - best.sortScore;
     if (margin <= 0) return 0.0;
     // 经验映射：差距 0.15 以上即认为非常明确
     return (margin / 0.15).clamp(0.0, 1.0);
@@ -113,15 +117,26 @@ class QuranMatcher {
     for (var i = 0; i < assets.verses.length; i++) {
       final words = assets.verses[i].words;
       if (words.isEmpty) continue;
-      _byFirstWord.putIfAbsent(words.first, () => <int>[]).add(i);
+      final wordSet = words.toSet();
+      _verseWordSets[i] = wordSet;
+      for (final word in wordSet) {
+        _byWord.putIfAbsent(word, () => <int>[]).add(i);
+      }
     }
   }
 
   /// 数据资产。
   final QuranAssets assets;
 
-  /// 首词 -> 经文下标倒排索引（加速召回）。
-  final Map<String, List<int>> _byFirstWord = {};
+  /// 词 -> 经文下标倒排索引（**全文**分词，不只用首词）。
+  ///
+  /// 只用首词做锚点会漏召回：诵读音频常以「太斯米」开头，而部分经文的文本
+  /// 本身也带太斯米前缀，导致其「首词」与实际诵读的首词不一致（例如 36:1
+  /// 文本为「بسم الله الرحمن الرحيم يس」，实际诵读正文首词是「يس」）。
+  final Map<String, List<int>> _byWord = {};
+
+  /// 每节经文的词集合缓存（用于覆盖率打分，避免重复构造）。
+  final Map<int, Set<String>> _verseWordSets = {};
 
   /// 默认参与 CTC 精排的候选数。
   static const int defaultTopK = 64;
@@ -129,41 +144,107 @@ class QuranMatcher {
   /// 默认最大连读跨度（节）。
   static const int defaultMaxSpan = 4;
 
+  /// 太斯米（بسم الله الرحمن الرحيم）对应的 token 序列。
+  ///
+  /// 词表中太斯米固定为这 5 个 token。部分经文的 token 表把太斯米并入「本章
+  /// 第 1 节」，而跨度 > 1 的 token 序列不含太斯米；同时实际诵读音频**可能
+  /// 不含太斯米**（Tilawa 官方语料中的单节样本即如此）。若候选序列凭空多出
+  /// 这 5 个 token，会因匹配不到音频而失分，进而把单节诵读误判为连读。
+  static const List<int> bismillahTokens = [351, 7, 59, 982, 986];
+
+  /// 连读跨度惩罚系数（每多连读一节，加在排序分上的惩罚）。
+  ///
+  /// CTC 平均对数似然对长序列存在系统性偏好：token 越多，分母越大，且多出的
+  /// token 还能「吸收」音频中的前缀/噪声帧，从而把平均损失压低。结果是单节
+  /// 诵读容易被判成多节连读。加一个与跨度成正比的惩罚，使多节候选必须在声学
+  /// 上明显更优（差 > 该系数）时才胜出。
+  static const double defaultSpanPenalty = 0.35;
+
   /// 文本召回。
   ///
-  /// 优先用识别文本的首个非空词做倒排锚点；若命中过少，则回退到全量打分。
+  /// 打分口径：**识别文本的词在经文中的覆盖率**（命中词数 / 识别词数）为主，
+  /// 整句编辑相似度为辅。覆盖率对「识别文本只是经文一部分」的场景更可靠：
+  /// 诵读常从太斯米后开念、或只念了节首几词，此时整句编辑相似度会因长度悬殊
+  /// 接近 0，导致正确经节被挤出候选，而覆盖率仍接近 1。
+  ///
+  /// 若倒排命中过少，则回退到全量扫描（同样用覆盖率打分）。
   ///
   /// @param decoded 归一化后的识别文本
   /// @param limit 返回的候选数量上限
   /// @return 按文本得分降序的 (经文下标, 文本得分) 列表
   List<MapEntry<int, double>> recall(String decoded, {int limit = 200}) {
     if (decoded.trim().isEmpty) return const [];
-    final words = decoded.split(' ').where((w) => w.isNotEmpty).toList();
+    final words = decoded.split(' ').where((w) => w.isNotEmpty).toSet();
     if (words.isEmpty) return const [];
 
-    final indices = <int>{};
-    // 用前两个词分别做锚点，兼顾「从中间开始诵读」的情况
-    for (final anchor in words.take(2)) {
-      final hit = _byFirstWord[anchor];
-      if (hit != null) indices.addAll(hit);
+    // 全文倒排：统计每个经节命中了识别文本里的几个词
+    final hitCount = <int, int>{};
+    for (final word in words) {
+      final hits = _byWord[word];
+      if (hits == null) continue;
+      for (final index in hits) {
+        hitCount[index] = (hitCount[index] ?? 0) + 1;
+      }
     }
-    final scanAll = indices.length < 8;
-    final candidates = <MapEntry<int, double>>[];
 
-    if (scanAll) {
+    final candidates = <MapEntry<int, double>>[];
+    if (hitCount.length < 8) {
+      // 命中过少（识别文本生僻或含噪声）→ 全量覆盖率扫描
       for (var i = 0; i < assets.verses.length; i++) {
-        candidates.add(MapEntry(i, QuranText.textScore(decoded, assets.verses[i].normalizedText)));
+        candidates.add(MapEntry(i, _textScoreOf(i, words, decoded)));
       }
     } else {
-      for (final index in indices) {
-        candidates.add(
-          MapEntry(index, QuranText.textScore(decoded, assets.verses[index].normalizedText)),
-        );
+      for (final index in hitCount.keys) {
+        candidates.add(MapEntry(index, _textScoreOf(index, words, decoded)));
       }
     }
 
     candidates.sort((a, b) => b.value.compareTo(a.value));
     return candidates.length > limit ? candidates.sublist(0, limit) : candidates;
+  }
+
+  /// 给候选 token 序列打声学分（自动容忍音频缺失太斯米前缀）。
+  ///
+  /// 若候选序列以 [bismillahTokens] 开头，则额外评估一次「剥离太斯米后」的
+  /// 序列，取两者中更优（更小）的分数，避免因音频未念太斯米而误罚该候选。
+  ///
+  /// @param evidence 声学证据
+  /// @param tokens 候选 token 序列
+  /// @return 平均负对数似然；不可行时返回 [CtcScorer.impossibleScore]
+  double _scoreTokens(AcousticEvidence evidence, List<int> tokens) {
+    var best = CtcScorer.scoreSequence(evidence, tokens);
+    if (tokens.length > bismillahTokens.length && _startsWith(tokens, bismillahTokens)) {
+      final trimmed = CtcScorer.scoreSequence(evidence, tokens.sublist(bismillahTokens.length));
+      if (trimmed < best) best = trimmed;
+    }
+    return best;
+  }
+
+  static bool _startsWith(List<int> tokens, List<int> prefix) {
+    if (tokens.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (tokens[i] != prefix[i]) return false;
+    }
+    return true;
+  }
+
+  /// 计算某经节对识别文本的召回得分（覆盖率为主、编辑相似度为辅）。
+  ///
+  /// @param index 经节下标
+  /// @param words 识别文本的词集合
+  /// @param decoded 识别文本
+  /// @return 0..1 的召回得分；完全无词命中时为 0
+  double _textScoreOf(int index, Set<String> words, String decoded) {
+    final verseWords = _verseWordSets[index];
+    if (verseWords == null || verseWords.isEmpty) return 0.0;
+    var matched = 0;
+    for (final word in words) {
+      if (verseWords.contains(word)) matched++;
+    }
+    final coverage = matched / words.length;
+    if (coverage == 0.0) return 0.0;
+    final edit = QuranText.textScore(decoded, assets.verses[index].normalizedText);
+    return coverage * 0.85 + edit * 0.15;
   }
 
   /// 执行「召回 + CTC 精排」，返回匹配结果。
@@ -172,12 +253,14 @@ class QuranMatcher {
   /// @param decoded 归一化识别文本
   /// @param topK 参与 CTC 精排的候选数
   /// @param maxSpan 最大连读跨度（节）
+  /// @param spanPenalty 跨度惩罚系数（见 [defaultSpanPenalty]）
   /// @return 匹配结果
   VerseMatchResult match(
     AcousticEvidence evidence,
     String decoded, {
     int topK = defaultTopK,
     int maxSpan = defaultMaxSpan,
+    double spanPenalty = defaultSpanPenalty,
   }) {
     final recalled = recall(decoded);
     if (recalled.isEmpty) {
@@ -196,7 +279,7 @@ class QuranMatcher {
         final ayahEnd = verse.ayah + span - 1;
         final tokens = assets.tokensFor(verse.surah, verse.ayah, ayahEnd);
         if (tokens == null || tokens.isEmpty) continue;
-        final acoustic = CtcScorer.scoreSequence(evidence, tokens);
+        final acoustic = _scoreTokens(evidence, tokens);
         if (acoustic >= CtcScorer.impossibleScore) continue;
         scored.add(
           VerseMatchCandidate(
@@ -205,6 +288,7 @@ class QuranMatcher {
             ayahEnd: ayahEnd,
             textScore: entry.value,
             acousticScore: acoustic,
+            sortScore: acoustic + spanPenalty * (span - 1),
             tokenLength: tokens.length,
             verse: verse,
           ),
@@ -221,10 +305,10 @@ class QuranMatcher {
       );
     }
 
-    scored.sort((a, b) => a.acousticScore.compareTo(b.acousticScore));
+    scored.sort((a, b) => a.sortScore.compareTo(b.sortScore));
     return VerseMatchResult(
       champion: scored.first,
-      runnersUp: scored.length > 1 ? scored.sublist(1, scored.length > 6 ? 6 : scored.length) : const [],
+      runnersUp: scored.length > 1 ? scored.sublist(1, scored.length > 12 ? 12 : scored.length) : const [],
       decodedText: decoded,
       recallCount: recalled.length,
     );

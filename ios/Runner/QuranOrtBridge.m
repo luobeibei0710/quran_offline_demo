@@ -6,8 +6,8 @@
 /** 复制模型时的缓冲区大小。 */
 static const size_t kCopyBufferSize = 1 << 16;
 
-/** 模型在沙盒中的缓存文件名。 */
-static NSString *const kModelFileName = @"fastconformer_full_mixed.onnx";
+/** 模型在沙盒中的缓存文件名（ORT 1.22 兼容版）。 */
+static NSString *const kModelFileName = @"fastconformer_full_mixed_ort122.onnx";
 
 @implementation QuranOrtBridge {
   ORTEnv *_env;

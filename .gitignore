@@ -67,3 +67,12 @@ app.*.map.json
 **/.venv*/
 __pycache__/
 *.pyo
+
+# 古兰经离线识别：大体积模型资产（用 tools/quran_offline/download_assets.sh 获取）
+assets/quran_offline/*.onnx
+assets/quran_offline/quran_ctc_tokens.json
+
+# 本地 Python 验证环境与样本
+tools/quran_offline/.venv/
+tools/quran_offline/.venv122/
+tools/quran_offline/samples/

@@ -207,3 +207,33 @@ AcousticEvidence buildAlignedEvidence(
     blankId: FixtureTokens.blank,
   );
 }
+
+/// 生成「类语音」测试音频：20 ms 帧中每 5 帧取一帧高幅，其余为本底低幅。
+///
+/// 用于驱动 [QuranStreamingSession] 的能量 VAD：峰值（0.2）显著高于中位数
+/// （0.001），满足「峰值 ≥ max(中位数 × 信噪比, 绝对下限)」判据；
+/// 同时整块 RMS 高于静音阈值，不会误判为静音。
+///
+/// @param seconds 时长（秒）
+/// @return 16 kHz 单声道 float32 采样
+Float32List buildSpeechLikeSamples(double seconds) {
+  const frameLength = 320; // 20 ms @ 16 kHz
+  final total = (seconds * 16000).round();
+  final samples = Float32List(total);
+  for (var i = 0; i < total; i++) {
+    samples[i] = (i ~/ frameLength) % 5 == 0 ? 0.2 : 0.001;
+  }
+  return samples;
+}
+
+/// 构造供页面内置样本使用的假 WAV 字节（44 字节头 + 静音 PCM16 载荷）。
+///
+/// 页面只跳过 44 字节头后按 PCM16 解析、不校验头内容，
+/// 因此无需构造真实的 WAV 结构。
+///
+/// @param seconds 音频时长（秒）
+/// @return WAV 字节
+Uint8List buildFakeWavBytes({double seconds = 0.1}) {
+  final payloadLength = (seconds * 16000).round() * 2;
+  return Uint8List(44 + payloadLength);
+}

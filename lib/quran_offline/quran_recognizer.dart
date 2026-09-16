@@ -17,6 +17,7 @@ import 'ctc_decoder.dart';
 import 'ort_runner.dart';
 import 'quran_assets.dart';
 import 'quran_matcher.dart';
+import 'quran_word_progress.dart';
 
 /// 一次识别的输出事件。
 class QuranRecognitionEvent {
@@ -27,6 +28,8 @@ class QuranRecognitionEvent {
     required this.stable,
     required this.isFinal,
     required this.audioSeconds,
+    this.words = const <String>[],
+    this.readWords = 0,
   });
 
   /// 匹配结果（含冠军与候选）。
@@ -46,6 +49,12 @@ class QuranRecognitionEvent {
 
   /// 当前冠军（可能为 null）。
   VerseMatchCandidate? get champion => match.champion;
+
+  /// 提词器用：当前候选跨度的经文词列表。
+  final List<String> words;
+
+  /// 提词器用：已读词数（0..[words].length）。
+  final int readWords;
 }
 
 /// 流式识别配置。
@@ -56,10 +65,13 @@ class QuranStreamingConfig {
     this.maxWindowSeconds = 15.0,
     this.minWindowSeconds = 1.2,
     this.stableRounds = 2,
-    this.silenceRmsThreshold = 0.005,
-    this.finalSilenceSeconds = 1.2,
+    this.silenceRmsThreshold = 0.012,
+    this.finalSilenceSeconds = 1.5,
+    this.speechRmsThreshold = 0.03,
+    this.speechSnrRatio = 2.5,
     this.topK = QuranMatcher.defaultTopK,
     this.maxSpan = QuranMatcher.defaultMaxSpan,
+    this.spanPenalty = QuranMatcher.defaultSpanPenalty,
   });
 
   /// 每累积多少秒音频触发一次识别。
@@ -75,7 +87,21 @@ class QuranStreamingConfig {
   final int stableRounds;
 
   /// 静音判定阈值（RMS）。
+  ///
+  /// 环境底噪（空调、风扇等）通常在 0.01 以上，阈值过低会导致静音永远
+  /// 判定不出来，从而持续对噪声做识别。
   final double silenceRmsThreshold;
+
+  /// 语音峰值绝对下限（RMS）：峰值低于该值一定不判为语音。
+  ///
+  /// 实测手机在安静房间的底噪 RMS 约 0.012~0.035，故下限取 0.03。
+  final double speechRmsThreshold;
+
+  /// 语音信噪比判据：窗内 20 ms 帧能量的 90 分位需高于中位数的该倍数。
+  ///
+  /// 语音有明显音节起伏（峰值远高于本底），稳态噪声则峰值接近本底。
+  /// 用比值而非固定阈值，才能适应不同环境的底噪差异。
+  final double speechSnrRatio;
 
   /// 静音多久后判定一次诵读结束。
   final double finalSilenceSeconds;
@@ -85,6 +111,9 @@ class QuranStreamingConfig {
 
   /// 最大连读跨度（节）。
   final int maxSpan;
+
+  /// 连读跨度惩罚系数（详见 [QuranMatcher.defaultSpanPenalty]）。
+  final double spanPenalty;
 }
 
 /// 一次性识别 + 流式识别的统一入口。
@@ -131,6 +160,7 @@ class QuranRecognizer {
       decoded.text,
       topK: config.topK,
       maxSpan: config.maxSpan,
+      spanPenalty: config.spanPenalty,
     );
   }
 
@@ -184,7 +214,12 @@ class QuranStreamingSession {
       return;
     }
     if (_secondsSinceTrigger >= _recognizer.config.triggerSeconds) {
-      await _flush(finalEvent: false);
+      // 语音门控：最近没有足够语音就跳过本轮，避免对噪声产生臆测结果
+      if (_hasSpeech(_accumulated)) {
+        await _flush(finalEvent: false);
+      } else {
+        _secondsSinceTrigger = 0;
+      }
     }
   }
 
@@ -215,6 +250,10 @@ class QuranStreamingSession {
     _busy = true;
     _secondsSinceTrigger = 0;
     try {
+      // 静音收尾且窗口内无语音时不上报，避免把噪声匹配结果当成识别结果
+      if (finalEvent && !_hasSpeech(_accumulated)) {
+        return;
+      }
       final windowSamples = (config.maxWindowSeconds * QuranRecognizer.sampleRate).round();
       final audio = _accumulated.length > windowSamples
           ? Float32List.sublistView(_accumulated, _accumulated.length - windowSamples)
@@ -227,6 +266,7 @@ class QuranStreamingSession {
         decoded.text,
         topK: config.topK,
         maxSpan: config.maxSpan,
+        spanPenalty: config.spanPenalty,
       );
 
       final champion = match.champion;
@@ -241,6 +281,22 @@ class QuranStreamingSession {
         stable = _stableCount >= config.stableRounds;
       }
 
+      // 提词器跟随：对齐出「已读到第几个词」（前缀可达性，见 QuranWordProgress）
+      var words = const <String>[];
+      var readWords = 0;
+      if (champion != null) {
+        final (spanWords, groups) = QuranWordProgress.alignedWords(
+          _recognizer.assets,
+          champion.surah,
+          champion.ayahStart,
+          champion.ayahEnd,
+        );
+        readWords = QuranWordProgress.estimateReadWords(evidence, groups);
+        // 提词器前瞻：附带下一节，保证界面始终存在「未读」区域可供对比
+        final nextVerse = _recognizer.assets.verse(champion.surah, champion.ayahEnd + 1);
+        words = nextVerse == null ? spanWords : [...spanWords, ...nextVerse.words];
+      }
+
       _controller.add(
         QuranRecognitionEvent(
           match: match,
@@ -248,6 +304,8 @@ class QuranStreamingSession {
           stable: stable,
           isFinal: finalEvent,
           audioSeconds: audio.length / QuranRecognizer.sampleRate,
+          words: words,
+          readWords: readWords,
         ),
       );
     } catch (error, stackTrace) {
@@ -258,6 +316,44 @@ class QuranStreamingSession {
         reset();
       }
     }
+  }
+
+  /// 简单能量 VAD：判断最近一段音频里是否存在语音。
+  ///
+  /// 不用固定能量阈值 —— 不同环境底噪差异极大（实测本机底噪 RMS 0.012~0.035，
+  /// 与轻声朗读的量级重叠）。改用「峰值 / 本底」信噪比判据：语音有明显音节
+  /// 起伏，峰值显著高于本底；稳态噪声（空调、风扇）的峰值与前段接近。
+  /// 同时要求峰值达到绝对下限，避免极安静环境被细微起伏触发。
+  ///
+  /// 只看最近 2 秒，符合「此刻是否在说话」的语义，计算量也是小常数级。
+  ///
+  /// @param samples 累积音频
+  /// @return 判定存在语音时返回 true
+  bool _hasSpeech(Float32List samples) {
+    const speechWindowSeconds = 2.0;
+    final frameLength = (0.02 * QuranRecognizer.sampleRate).round();
+    final windowSamples = (speechWindowSeconds * QuranRecognizer.sampleRate).round();
+    final start = samples.length > windowSamples ? samples.length - windowSamples : 0;
+    if (frameLength <= 0 || samples.length - start < frameLength * 8) return false;
+
+    final frames = <double>[];
+    for (var i = start; i + frameLength <= samples.length; i += frameLength) {
+      var sum = 0.0;
+      for (var j = i; j < i + frameLength; j++) {
+        sum += samples[j] * samples[j];
+      }
+      frames.add(math.sqrt(sum / frameLength));
+    }
+    if (frames.length < 8) return false;
+
+    frames.sort();
+    final median = frames[frames.length ~/ 2];
+    final peak = frames[((frames.length - 1) * 0.9).round()];
+    final required = math.max(
+      median * _recognizer.config.speechSnrRatio,
+      _recognizer.config.speechRmsThreshold,
+    );
+    return peak >= required;
   }
 
   /// 计算分块 RMS，用于静音检测。

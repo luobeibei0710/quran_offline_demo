@@ -39,8 +39,8 @@ public final class QuranOrtBridge {
     /** 复制模型时的缓冲区大小。 */
     private static final int COPY_BUFFER_SIZE = 1 << 16;
 
-    /** 模型在私有目录下的文件名。 */
-    private static final String MODEL_FILE_NAME = "fastconformer_full_mixed.onnx";
+    /** 模型在私有目录下的文件名（ORT 1.22 兼容版，含版本后缀以便缓存失效）。 */
+    private static final String MODEL_FILE_NAME = "fastconformer_full_mixed_ort122.onnx";
 
     private static QuranOrtBridge instance;
 
