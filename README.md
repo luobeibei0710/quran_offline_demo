@@ -1,5 +1,7 @@
 # 古兰经离线识别 Demo
 
+[![CI](https://github.com/luobeibei0710/quran_offline_demo/actions/workflows/ci.yml/badge.svg)](https://github.com/luobeibei0710/quran_offline_demo/actions/workflows/ci.yml)
+
 端侧**全离线**的古兰经诵读识别验证工程：麦克风采集 → ONNX 声学模型推理 → CTC 解码 → 经文约束匹配 → 界面展示。
 
 验证通过后再移植回主工程（courier-mobile）。
@@ -47,6 +49,25 @@ flutter run                   # 需要真机（麦克风）
 
 使用步骤：点击「加载模型」（首次会复制 88 MB 模型到应用私有目录）→「开始识别」→ 诵读 → 界面实时显示章节、标准经文、识别原文、候选与置信度。
 
+## 测试与 CI
+
+```bash
+flutter analyze   # 静态分析
+flutter test      # 45 个用例
+```
+
+测试**不依赖** `assets/quran_offline/` 下的真实资产：用例通过 `FakeAssetBundle` 注入最小化的
+内存资产、通过 `ScriptedOrtRunner` 注入合成声学证据，覆盖归一化、贪心 CTC 解码、
+CTC 前向后向精排、资产解析与「解码 → 召回 → 精排」全链路，因此 clone 后无需下载
+99 MB 模型即可跑通（真机麦克风与模型推理仍需 `flutter run` 验证）。
+
+CI 定义见 `.github/workflows/ci.yml`，两个 Job：
+
+| Job | 内容 |
+|-----|------|
+| 静态分析 + 单元测试 | `flutter analyze` → `flutter test --coverage`，上传 `lcov.info` |
+| 构建 Android APK | 缓存/下载模型资产 → `flutter build apk --debug`，上传 APK 产物 |
+
 ## 已完成验证（Python 基准）
 
 | 项 | 结果 |
@@ -78,7 +99,10 @@ android/app/src/main/java/.../QuranOrtBridge.java   ONNX Runtime 桥
 android/app/src/main/kotlin/.../MainActivity.kt     通道注册
 ios/Runner/QuranOrtBridge.{h,m}                     ONNX Runtime 桥
 ios/Runner/AppDelegate.swift                        通道注册
+test/                                               单元测试与页面冒烟测试
+test/support/quran_test_fixtures.dart               内存资产包与脚本化推理桥
 tools/quran_offline/                                资产下载与 Python 验证脚本
+.github/workflows/ci.yml                            静态分析 + 测试 + APK 构建
 ```
 
 ## 已知限制
