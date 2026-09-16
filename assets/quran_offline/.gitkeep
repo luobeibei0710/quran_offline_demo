@@ -1,0 +1,2 @@
+# 该目录存放古兰经离线识别资产（约 99 MB），不纳入版本库。
+# 获取方式：bash tools/quran_offline/download_assets.sh

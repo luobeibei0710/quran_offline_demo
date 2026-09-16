@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 与本地验证通过的 Flutter 版本保持一致
+  FLUTTER_VERSION: 3.41.8
+
+jobs:
+  analyze-and-test:
+    name: 静态分析 + 单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 静态分析
+        run: flutter analyze
+
+      - name: 单元测试
+        run: flutter test --coverage
+
+      - name: 上传覆盖率报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          if-no-files-found: ignore
+
+  build-android:
+    name: 构建 Android APK
+    runs-on: ubuntu-latest
+    needs: analyze-and-test
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # 模型资产约 99 MB，不入版本库；缓存后仅在首次构建时下载
+      - name: 缓存模型资产
+        id: asset-cache
+        uses: actions/cache@v4
+        with:
+          path: assets/quran_offline
+          key: quran-assets-${{ hashFiles('tools/quran_offline/download_assets.sh') }}
+
+      - name: 下载模型资产
+        if: steps.asset-cache.outputs.cache-hit != 'true'
+        run: bash tools/quran_offline/download_assets.sh
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 构建 Debug APK
+        run: flutter build apk --debug
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
