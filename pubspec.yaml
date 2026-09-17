@@ -59,9 +59,11 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # 古兰经离线识别资产：声学模型（88 MB）、词表与经文库（约 104 MB）
+  # 古兰经离线识别资产：声学模型（原版 88 MB + 改造版 130 MB）、词表与经文库（约 15 MB），不入版本库
   assets:
     - assets/quran_offline/
+    # 比对用原文（参考答案，约 3 KB，纳入版本库）
+    - assets/quran_reference/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

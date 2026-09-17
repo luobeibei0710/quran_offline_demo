@@ -19,8 +19,12 @@ import 'package:record/record.dart';
 
 import 'ort_runner.dart';
 import 'quran_assets.dart';
+import 'quran_compare_page.dart';
 import 'quran_matcher.dart';
 import 'quran_recognizer.dart';
+import 'reference_text.dart';
+import 'transcript_stitcher.dart';
+import 'word_alignment.dart';
 
 /// 声学模型在 Flutter 资产中的路径（与 pubspec 声明一致）。
 ///
@@ -44,6 +48,7 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
   final AudioRecorder _recorder = AudioRecorder();
   final List<String> _logs = <String>[];
 
+  QuranAssets? _assets;
   QuranRecognizer? _recognizer;
   PlatformOrtRunner? _runner;
   QuranStreamingSession? _session;
@@ -56,6 +61,9 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
   final List<QuranRecognitionEvent> _history = <QuranRecognitionEvent>[];
   int _stableCommitCount = 0;
   double _micLevel = 0;
+
+  /// 连续转写稿：把逐窗重复识别结果按最长重叠去重后累积，供比对页使用。
+  final TranscriptStitcher _stitcher = TranscriptStitcher();
 
   /// 提词器滚动控制器，以及文本区可用宽度（用于计算居中滚动位置）。
   final ScrollController _prompterScroll = ScrollController();
@@ -113,6 +121,7 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       _log('模型加载完成（总耗时 ${stopwatch.elapsedMilliseconds}ms）');
 
       setState(() {
+        _assets = assets;
         _runner = runner;
         _recognizer = QuranRecognizer(assets: assets, runner: runner);
         _phase = _Phase.ready;
@@ -144,8 +153,12 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     _session = session;
     _history.clear();
     _stableCommitCount = 0;
+    // 新一轮诵读：清空上一轮的转写稿
+    _stitcher.reset();
 
     _eventSubscription = session.events.listen((event) {
+      // 同一段话会被多轮重复识别，按最长重叠去重后再累积成连续转写稿
+      _stitcher.add(event.decodedText);
       setState(() {
         _latest = event;
         _history.insert(0, event);
@@ -212,14 +225,16 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     _eventSubscription = null;
     setState(() {
       _phase = _Phase.ready;
-      _status = '已停止，可再次开始';
+      _status = '已停止，可点右上角图标查看比对结果';
     });
-    _log('已停止采集');
+    _log('已停止采集，转写共 ${_stitcher.length} 词');
+    await _logComparisonPreview();
   }
 
   /// 重置识别状态，开始新一次诵读。
   void _reset() {
     _session?.reset();
+    _stitcher.reset();
     setState(() {
       _latest = null;
       _history.clear();
@@ -228,11 +243,48 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     _log('已重置');
   }
 
+  /// 打开比对页：左侧原文（`reference_text.txt`），右侧本次转写稿。
+  Future<void> _openComparison() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => QuranComparePage(hypothesisWords: _stitcher.words),
+      ),
+    );
+  }
+
+  /// 结束识别后先算一遍比对指标并写入日志，不打开页面也能看到结果概览。
+  Future<void> _logComparisonPreview() async {
+    final words = _stitcher.words;
+    if (words.isEmpty) return;
+    try {
+      final reference = await ReferenceText.load();
+      final result = WordAlignment.align(reference.words, words);
+      _log('比对预览 原文${result.referenceCount}词/转写${result.hypothesisCount}词 '
+          'F1=${result.f1.toStringAsFixed(3)} '
+          '覆盖率=${result.coverage.toStringAsFixed(3)} '
+          '准确率=${result.precision.toStringAsFixed(3)} '
+          '一致=${result.matchCount} 近似=${result.nearCount} 错配=${result.mismatchCount} '
+          '缺失=${result.missingCount} 多余=${result.extraCount} 结论=${result.verdict}');
+    } catch (error) {
+      _log('比对预览失败：$error');
+    }
+  }
+
   /// 联调开关：内置样本验证结束后自动开启麦克风识别。
   ///
-  /// 置 true 时可用「播放已知音频 → 手机收音」的方式无人值守验证链路
-  /// （真机自动化点击受系统权限限制）；正式演示请保持 false，由用户点按触发。
-  static const bool _autoStartListening = false;
+  /// 打开方式：`flutter run --dart-define=quran_auto_start=true`
+  /// （Android 禁用 `input tap`、iOS 模拟器无法脚本点击，无人值守验证只能靠它）；
+  /// 默认关闭，正式演示由用户点按触发。
+  static const bool _autoStartListening = bool.fromEnvironment('quran_auto_start');
+
+  /// 联调开关：自动开始识别后经过该秒数自动停止并输出比对预览，0 表示不自动停止。
+  ///
+  /// 打开方式：`--dart-define=quran_auto_stop_seconds=160`
+  static const int _autoStopSeconds = int.fromEnvironment('quran_auto_stop_seconds');
+
+  /// 提词器开关：true 时主区显示「逐词跟随高亮」提词器；
+  /// false 时显示 Streaming 样式（整句奥斯曼体经文）。
+  static const bool _showTeleprompter = false;
 
   /// 内置验证样本：资源路径 → 期望章节（文件名即标准答案，SSSAAA = 章号、节号）。
   static const Map<String, String> _builtinSamples = {
@@ -337,6 +389,11 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       await Future<void>.delayed(const Duration(seconds: 2));
       _log('联调模式：自动开始麦克风识别');
       await _start();
+      if (_autoStopSeconds > 0) {
+        Timer(Duration(seconds: _autoStopSeconds), () {
+          if (mounted && _phase == _Phase.recording) unawaited(_stop());
+        });
+      }
     }
   }
 
@@ -369,6 +426,12 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       appBar: AppBar(
         title: const Text('古兰经离线识别 Demo'),
         actions: [
+          // 比对入口：有转写内容后可用，进入「左侧原文 / 右侧转写」比对页
+          IconButton(
+            tooltip: '比对结果（左：原文，右：转写）',
+            onPressed: _stitcher.isEmpty ? null : _openComparison,
+            icon: const Icon(Icons.compare_arrows),
+          ),
           IconButton(
             tooltip: '重置',
             onPressed: _phase == _Phase.recording ? _reset : null,
@@ -380,7 +443,7 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
         children: [
           _buildHeader(),
           _buildChapterBar(champion, match),
-          Expanded(child: _buildTeleprompter(champion)),
+          Expanded(child: _buildVerseBody(champion)),
           _buildFooter(),
         ],
       ),
@@ -420,6 +483,43 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
         ],
       ),
     );
+  }
+
+  /// 主区内容：按开关显示提词器或整句经文（Streaming 样式）。
+  Widget _buildVerseBody(VerseMatchCandidate? champion) {
+    if (champion == null) {
+      return const Center(
+        child: Text(
+          '开始诵读后，这里显示识别到的经文',
+          style: TextStyle(fontSize: 14, color: Colors.black38),
+        ),
+      );
+    }
+    if (_showTeleprompter) return _buildTeleprompter(champion);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Text(
+          champion.isSpan ? _spanText(champion) : champion.verse.textUthmani,
+          style: const TextStyle(fontSize: 26, height: 2.1),
+        ),
+      ),
+    );
+  }
+
+  /// 拼接多节经文的奥斯曼体文本。
+  String _spanText(VerseMatchCandidate champion) {
+    final assets = _assets;
+    if (assets == null) return champion.verse.textUthmani;
+    final buffer = StringBuffer();
+    for (var ayah = champion.ayahStart; ayah <= champion.ayahEnd; ayah++) {
+      final verse = assets.verse(champion.surah, ayah);
+      if (verse == null) continue;
+      if (buffer.isNotEmpty) buffer.write(' ');
+      buffer.write(verse.textUthmani);
+    }
+    return buffer.toString();
   }
 
   /// 提词器：整屏逐词显示经文，已朗读 / 当前 / 未读三态强对比，并自动居中跟随。
