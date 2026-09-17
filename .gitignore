@@ -18,6 +18,9 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# 编辑器工作区文件（不同项目的工程组合不应入库）
+*.code-workspace
+
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.

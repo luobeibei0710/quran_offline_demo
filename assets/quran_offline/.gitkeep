@@ -1,2 +1,5 @@
-# 该目录存放古兰经离线识别资产（约 99 MB），不纳入版本库。
+# 该目录存放古兰经离线识别资产（原版模型 88 MB + 数据表约 15 MB），不纳入版本库。
 # 获取方式：bash tools/quran_offline/download_assets.sh
+# 移动端实际加载的改造版模型（约 130 MB）另需执行：
+#   tools/quran_offline/.venv/bin/python tools/quran_offline/convert_for_ort122.py
+# 内置样本验证所需的 sample_SSSAAA.wav 需自行准备，也放在本目录。

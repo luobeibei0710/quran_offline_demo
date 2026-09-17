@@ -67,7 +67,7 @@ jobs:
           channel: stable
           cache: true
 
-      # 模型资产约 99 MB，不入版本库；缓存后仅在首次构建时下载
+      # 模型与数据表约 103 MB，不入版本库；缓存后仅在首次构建时下载
       - name: 缓存模型资产
         id: asset-cache
         uses: actions/cache@v4
@@ -91,3 +91,33 @@ jobs:
           name: app-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+
+  build-ios:
+    name: 构建 iOS（模拟器）
+    runs-on: macos-latest
+    needs: analyze-and-test
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: 缓存 CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('ios/Podfile') }}
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      # 只验证「ObjC 桥 + ORT XCFramework + Pods 集成」能编译链接：
+      # 模型资产不入版本库（assets 目录内只有 .gitkeep），构建链路不依赖它，
+      # 真实推理需要本地准备好资产后跑 flutter run。
+      - name: 构建模拟器版本
+        run: flutter build ios --simulator --debug
