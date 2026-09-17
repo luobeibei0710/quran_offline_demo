@@ -36,17 +36,14 @@ import UIKit
           return
         }
         DispatchQueue.global(qos: .userInitiated).async {
-          var error: NSError?
-          let ok = bridge.loadModel(withAssetKey: assetPath, error: &error)
-          DispatchQueue.main.async {
-            if ok {
-              result(true)
-            } else {
-              result(FlutterError(
-                code: "QURAN_LOAD_FAILED",
-                message: error?.localizedDescription ?? "模型加载失败",
-                details: nil
-              ))
+          // ObjC 侧带 NSError** 的方法在 Swift 中被导入为 throws，失败直接抛错
+          do {
+            try bridge.loadModel(withAssetKey: assetPath)
+            DispatchQueue.main.async { result(true) }
+          } catch {
+            let message = error.localizedDescription
+            DispatchQueue.main.async {
+              result(FlutterError(code: "QURAN_LOAD_FAILED", message: message, details: nil))
             }
           }
         }
@@ -60,11 +57,17 @@ import UIKit
         }
         let samples = typed.data
         DispatchQueue.global(qos: .userInitiated).async {
-          var error: NSError?
-          let count = samples.count / MemoryLayout<Float>.size
-          let payload: [String: Any]? = samples.withUnsafeBytes { pointer -> [String: Any]? in
-            guard let base = pointer.bindMemory(to: Float.self).baseAddress else { return nil }
-            return bridge.run(withSamples: base, count: count, error: &error)
+          // ObjC 侧 NSUInteger 在 Swift 中为 UInt
+          let count = UInt(samples.count / MemoryLayout<Float>.size)
+          var payload: [String: Any]?
+          var failure: Error?
+          samples.withUnsafeBytes { pointer in
+            guard let base = pointer.bindMemory(to: Float.self).baseAddress else { return }
+            do {
+              payload = try bridge.run(withSamples: base, count: count)
+            } catch {
+              failure = error
+            }
           }
           DispatchQueue.main.async {
             if let payload = payload {
@@ -72,7 +75,7 @@ import UIKit
             } else {
               result(FlutterError(
                 code: "QURAN_RUN_FAILED",
-                message: error?.localizedDescription ?? "推理失败",
+                message: failure?.localizedDescription ?? "推理失败",
                 details: nil
               ))
             }

@@ -1,5 +1,6 @@
 # Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# onnxruntime-objc 1.22.0 要求 iOS 15.1 起（Xcode 工程的 IPHONEOS_DEPLOYMENT_TARGET 同步为 15.1）
+platform :ios, '15.1'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -30,8 +31,10 @@ flutter_ios_podfile_setup
 target 'Runner' do
   use_frameworks!
 
-  # 古兰经离线识别：ONNX Runtime（CPU，模型为 int4/int8 混合量化）
-  pod 'onnxruntime-objc'
+  # 古兰经离线识别：ONNX Runtime（CPU）。
+  # 锁定 1.22.0 以与 Android 侧 AAR 版本一致：设备端数值差异会直接翻转 CTC 跨度判定
+  # （见 README「已知限制」中的 112:1 案例），两端同版本才能保证结果可比。
+  pod 'onnxruntime-objc', '1.22.0'
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do

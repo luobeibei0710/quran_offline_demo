@@ -105,14 +105,23 @@ static NSString *const kModelFileName = @"fastconformer_full_mixed_ort122.onnx";
       _audioInputName : audioValue,
       _lengthInputName : lengthValue,
     };
+    // ORT ObjC 1.22 的 run 需要显式 runOptions（不需要时传 nil）
     NSDictionary<NSString *, ORTValue *> *outputs =
-        [_session runWithInputs:inputs outputNames:[NSSet setWithObject:@"log_probs"] error:error];
+        [_session runWithInputs:inputs
+                    outputNames:[NSSet setWithObject:@"log_probs"]
+                     runOptions:nil
+                          error:error];
     ORTValue *logProbs = outputs[@"log_probs"];
     if (logProbs == nil) {
       return nil;
     }
 
-    NSArray<NSNumber *> *shape = [logProbs shapeWithError:error];
+    // ORTValue 上没有 shapeWithError:，形状信息经 ORTTensorTypeAndShapeInfo 取得
+    ORTTensorTypeAndShapeInfo *shapeInfo = [logProbs tensorTypeAndShapeInfoWithError:error];
+    if (shapeInfo == nil) {
+      return nil;
+    }
+    NSArray<NSNumber *> *shape = shapeInfo.shape;
     if (shape.count < 3) {
       return nil;
     }
