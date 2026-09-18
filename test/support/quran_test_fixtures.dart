@@ -180,11 +180,13 @@ class ScriptedOrtRunner implements OrtRunner {
 /// @param target 目标 token 序列
 /// @param peakLogProb 峰值帧的 log 概率
 /// @param otherLogProb 其余 token 的 log 概率
+/// @param trailingBlankFrames 末尾追加的空白帧数（模拟「话已说完、尾部是静音」）
 /// @return 合成的声学证据
 AcousticEvidence buildAlignedEvidence(
   List<int> target, {
   double peakLogProb = -0.01,
   double otherLogProb = -12.0,
+  int trailingBlankFrames = 0,
 }) {
   final states = <int>[];
   for (final id in target) {
@@ -193,6 +195,9 @@ AcousticEvidence buildAlignedEvidence(
       ..add(id);
   }
   states.add(FixtureTokens.blank);
+  for (var i = 0; i < trailingBlankFrames; i++) {
+    states.add(FixtureTokens.blank);
+  }
 
   final timeSteps = states.length;
   final vocabSize = FixtureTokens.vocabSize;

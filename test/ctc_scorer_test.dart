@@ -163,4 +163,67 @@ void main() {
       expect(argMin(CtcNormalization.perFrame), argMin(CtcNormalization.perToken));
     });
   });
+
+  group('CtcScorer.alignFrames', () {
+    test('对齐结果落在各 token 的实际发射帧上', () {
+      // 帧序列：blank, bism, blank, allah, blank
+      final evidence = buildAlignedEvidence(<int>[FixtureTokens.bism, FixtureTokens.allah]);
+
+      final spans = CtcScorer.alignFrames(
+        evidence,
+        <int>[FixtureTokens.bism, FixtureTokens.allah],
+      )!;
+
+      expect(spans, hasLength(2));
+      expect(spans[0].start, 1);
+      expect(spans[0].end, 1);
+      expect(spans[1].start, 3);
+      expect(spans[1].end, 3);
+    });
+
+    test('尾部无内容的 token 被对齐到内容区之后', () {
+      final evidence = buildAlignedEvidence(
+        <int>[FixtureTokens.bism, FixtureTokens.allah],
+        trailingBlankFrames: 4,
+      );
+
+      final spans = CtcScorer.alignFrames(
+        evidence,
+        <int>[FixtureTokens.bism, FixtureTokens.allah, FixtureTokens.alhamd],
+      )!;
+
+      expect(CtcScorer.lastContentFrame(evidence), 3);
+      expect(spans[2].start, greaterThan(CtcScorer.lastContentFrame(evidence)));
+    });
+
+    test('序列为空或帧数不足时返回 null', () {
+      final evidence = buildAlignedEvidence(<int>[FixtureTokens.bism]);
+
+      expect(CtcScorer.alignFrames(evidence, const <int>[]), isNull);
+      expect(
+        CtcScorer.alignFrames(
+          evidence,
+          <int>[FixtureTokens.bism, FixtureTokens.allah, FixtureTokens.alhamd],
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('CtcScorer.lastContentFrame', () {
+    test('返回最后一个非 blank 帧', () {
+      final evidence = buildAlignedEvidence(
+        <int>[FixtureTokens.bism, FixtureTokens.allah],
+        trailingBlankFrames: 3,
+      );
+
+      expect(CtcScorer.lastContentFrame(evidence), 3);
+    });
+
+    test('全 blank 时返回 -1', () {
+      final evidence = buildAlignedEvidence(const <int>[]);
+
+      expect(CtcScorer.lastContentFrame(evidence), -1);
+    });
+  });
 }

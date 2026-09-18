@@ -2,11 +2,14 @@
 ///
 /// 思路
 /// ----
-/// CTC 要求完整解释整段音频，若直接对整节 token 序列做强制对齐，会把还没
-/// 朗读的 token 硬塞到末尾几帧，无法反映真实进度。因此改用**前缀可达性**：
-/// 对「前 k 个词」的 token 前缀分别做 CTC 打分，随着 k 增大分数先降（读到
-/// 更多真实内容）后升（多出的 token 缺乏声学证据）。取「分数在最优值容差内
-/// 的最长前缀」即为用户当前读到的位置 —— 与 Tilawa 的稳定前缀选择同思路。
+/// CTC 要求完整解释整段音频，因此对整节 token 序列做强制对齐时，尚未朗读的 token
+/// 会被硬塞到末尾几帧 —— 这恰好是可利用的信号：**被挤到音频内容区之后的 token 就是
+/// 「还没念到」**。默认做法即帧级强制对齐（[CtcScorer.alignFrames]）+ 内容区边界
+/// （[CtcScorer.lastContentFrame]），不依赖任何容差常数。
+///
+/// 序列帧数不足（不可行）时退回**前缀可达性**（见 [estimateReadWordsByPrefix]）：
+/// 对「前 k 个词」的 token 前缀分别做 CTC 打分，随着 k 增大分数先降（读到更多真实
+/// 内容）后升（多出的 token 缺乏声学证据），取「分数在最优值容差内的最长前缀」。
 library;
 
 import 'ctc_scorer.dart';
@@ -42,15 +45,55 @@ class QuranWordProgress {
     return groups;
   }
 
-  /// 估算已读词数。
+  /// 估算已读词数（帧级强制对齐，默认路径）。
   ///
-  /// 对每个词边界处的前缀做 CTC 打分，返回「分数处于最优容差内」的最长词数。
+  /// 做法：对候选序列做强制对齐（[CtcScorer.alignFrames]）得到每个词的发射起始帧，
+  /// 取「起始帧落在音频内容区（[CtcScorer.lastContentFrame]）之内」的最长前缀词数。
+  /// 尾部没有内容证据的词会被 CTC 挤压到空白帧，因此判为「尚未念到」。
+  ///
+  /// 相比前缀打分 + 容差的做法，本方法**不依赖任何容差常数**；序列帧数不足
+  /// （不可行）时退回 [estimateReadWordsByPrefix]。
+  ///
+  /// @param evidence 声学证据（本轮窗口）
+  /// @param wordTokens 按词分组后的 token 序列
+  /// @return 已读词数（0..wordTokens.length）
+  static int estimateReadWords(AcousticEvidence evidence, List<List<int>> wordTokens) {
+    if (wordTokens.isEmpty) return 0;
+
+    final flat = <int>[];
+    final tokenCounts = <int>[];
+    for (final group in wordTokens) {
+      flat.addAll(group);
+      tokenCounts.add(group.length);
+    }
+    if (flat.isEmpty) return 0;
+
+    final spans = CtcScorer.alignFrames(evidence, flat);
+    if (spans == null) return estimateReadWordsByPrefix(evidence, wordTokens);
+
+    final contentEnd = CtcScorer.lastContentFrame(evidence);
+    if (contentEnd < 0) return 0;
+
+    var readWords = 0;
+    var tokenIndex = 0;
+    for (final count in tokenCounts) {
+      if (spans[tokenIndex].start > contentEnd) break;
+      readWords++;
+      tokenIndex += count;
+    }
+    return readWords;
+  }
+
+  /// 前缀打分法估算已读词数（[estimateReadWords] 的回退路径）。
+  ///
+  /// 对每个词边界处的前缀做 CTC 打分（按 token 口径），返回「分数处于最优容差内」
+  /// 的最长词数；序列整体不可行时返回 0。
   ///
   /// @param evidence 声学证据（本轮窗口）
   /// @param wordTokens 按词分组后的 token 序列
   /// @param tolerance 分数容差
   /// @return 已读词数（0..wordTokens.length）
-  static int estimateReadWords(
+  static int estimateReadWordsByPrefix(
     AcousticEvidence evidence,
     List<List<int>> wordTokens, {
     double tolerance = defaultTolerance,

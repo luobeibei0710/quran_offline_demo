@@ -78,6 +78,44 @@ void main() {
 
       expect(QuranWordProgress.estimateReadWords(evidence, const <List<int>>[]), 0);
     });
+
+    test('帧级对齐：被挤到音频内容区之后的词不算已读', () {
+      // 音频只念了 2 个 token，候选多出 1 个 token（尾部有空白帧才可行）
+      final evidence = buildAlignedEvidence(
+        <int>[FixtureTokens.bism, FixtureTokens.allah],
+        trailingBlankFrames: 4,
+      );
+
+      final readWords = QuranWordProgress.estimateReadWords(evidence, <List<int>>[
+        <int>[FixtureTokens.bism],
+        <int>[FixtureTokens.allah],
+        <int>[FixtureTokens.alhamd],
+      ]);
+
+      expect(readWords, 2);
+    });
+
+    test('全 blank 音频（无可读内容）返回 0', () {
+      final evidence = buildAlignedEvidence(const <int>[]);
+
+      final readWords = QuranWordProgress.estimateReadWords(evidence, <List<int>>[
+        <int>[FixtureTokens.bism],
+      ]);
+
+      expect(readWords, 0);
+    });
+
+    test('帧数不足时回退到前缀法', () {
+      // 5 帧证据下 [1,2,3] 需要 7 帧 → 对齐不可行 → 回退前缀法得到 1
+      final evidence = buildAlignedEvidence(<int>[FixtureTokens.bism, FixtureTokens.allah]);
+
+      final readWords = QuranWordProgress.estimateReadWords(evidence, <List<int>>[
+        <int>[FixtureTokens.bism],
+        <int>[FixtureTokens.allah, FixtureTokens.alhamd],
+      ]);
+
+      expect(readWords, 1);
+    });
   });
 
   group('QuranWordProgress.alignedWords', () {

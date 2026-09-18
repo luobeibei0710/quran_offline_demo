@@ -58,6 +58,24 @@ enum CtcNormalization {
   perToken,
 }
 
+/// 单个 token 的强制对齐结果：它在最优路径上占用的帧区间（含两端）。
+class CtcAlignmentSpan {
+  /// 构造帧区间。
+  ///
+  /// @param start 发射起始帧
+  /// @param end 发射结束帧
+  const CtcAlignmentSpan({required this.start, required this.end});
+
+  /// 发射起始帧。
+  final int start;
+
+  /// 发射结束帧。
+  final int end;
+
+  @override
+  String toString() => 'CtcAlignmentSpan($start..$end)';
+}
+
 /// CTC 打分工具。
 class CtcScorer {
   CtcScorer._();
@@ -131,6 +149,116 @@ class CtcScorer {
     }
     final divisor = normalize == CtcNormalization.perFrame ? evidence.timeSteps : targetLength;
     return -finalScore / divisor;
+  }
+
+  /// 强制对齐：求候选 token 序列的 Viterbi 最优路径，返回每个 token 的发射帧区间。
+  ///
+  /// 与 [scoreSequence] 用同一套 CTC 状态图（blank 与 token 交替）。返回的区间是
+  /// 「最优路径在该 token 状态上停留的帧」，用于**帧级**判断读到第几个词 ——
+  /// 被挤压到音频尾部空白帧的 token 即「尚未念到」（见 [lastContentFrame]）。
+  ///
+  /// 复杂度 O(帧数 × 状态数)，并保存回溯表（帧数 × 状态数 的 int）。
+  ///
+  /// @param evidence 声学证据
+  /// @param ids 候选 token 序列
+  /// @return 每个 token 的帧区间；序列为空或帧数不足（不可行）时返回 null
+  static List<CtcAlignmentSpan>? alignFrames(AcousticEvidence evidence, List<int> ids) {
+    final targetLength = ids.length;
+    if (targetLength == 0) return null;
+    if (minFramesRequired(targetLength) > evidence.timeSteps) return null;
+
+    final stateCount = targetLength * 2 + 1;
+    final states = Int32List(stateCount);
+    for (var s = 0; s < stateCount; s++) {
+      states[s] = s.isEven ? evidence.blankId : ids[(s - 1) >> 1];
+    }
+
+    var prev = Float64List(stateCount)..fillRange(0, stateCount, double.negativeInfinity);
+    var curr = Float64List(stateCount)..fillRange(0, stateCount, double.negativeInfinity);
+    // back[t][s] = 帧 t 处于状态 s 时的前驱状态
+    final back = List<Int32List>.generate(
+      evidence.timeSteps,
+      (_) => Int32List(stateCount)..fillRange(0, stateCount, -1),
+      growable: false,
+    );
+
+    prev[0] = evidence.logprobs[evidence.blankId];
+    if (stateCount > 1) {
+      prev[1] = evidence.logprobs[states[1]];
+    }
+
+    for (var t = 1; t < evidence.timeSteps; t++) {
+      curr.fillRange(0, stateCount, double.negativeInfinity);
+      final frameOffset = t * evidence.vocabSize;
+      final row = back[t];
+      for (var s = 0; s < stateCount; s++) {
+        var best = prev[s];
+        var from = s;
+        if (s > 0 && prev[s - 1] > best) {
+          best = prev[s - 1];
+          from = s - 1;
+        }
+        if (s > 1 &&
+            states[s] != evidence.blankId &&
+            states[s] != states[s - 2] &&
+            prev[s - 2] > best) {
+          best = prev[s - 2];
+          from = s - 2;
+        }
+        if (best == double.negativeInfinity) continue;
+        curr[s] = best + evidence.logprobs[frameOffset + states[s]];
+        row[s] = from;
+      }
+      final swap = prev;
+      prev = curr;
+      curr = swap;
+    }
+
+    var endState = stateCount - 1;
+    if (stateCount > 1 && prev[stateCount - 2] > prev[endState]) {
+      endState = stateCount - 2;
+    }
+    if (prev[endState] == double.negativeInfinity) return null;
+
+    // 回溯：先还原每帧所在状态，再归并成每个 token 的帧区间
+    final spans = List<CtcAlignmentSpan?>.filled(targetLength, null);
+    var state = endState;
+    for (var t = evidence.timeSteps - 1; t >= 0; t--) {
+      if (state.isOdd) {
+        final tokenIndex = (state - 1) >> 1;
+        final existing = spans[tokenIndex];
+        spans[tokenIndex] = existing == null
+            ? CtcAlignmentSpan(start: t, end: t)
+            : CtcAlignmentSpan(start: t, end: existing.end);
+      }
+      if (t > 0) state = back[t][state];
+    }
+    if (spans.any((span) => span == null)) return null;
+    return spans.cast<CtcAlignmentSpan>();
+  }
+
+  /// 音频「内容区」的最后一帧：逐帧取 argmax，返回最后一个**非 blank** 的帧号。
+  ///
+  /// 之后的帧在贪心解码里全是 blank（静音或尾部），因此被对齐到该区之后的 token
+  /// 视为「还没念到」。整段都没有内容帧时返回 -1。
+  ///
+  /// @param evidence 声学证据
+  /// @return 最后一个内容帧下标；无内容帧时返回 -1
+  static int lastContentFrame(AcousticEvidence evidence) {
+    for (var t = evidence.timeSteps - 1; t >= 0; t--) {
+      final offset = t * evidence.vocabSize;
+      var bestId = 0;
+      var bestValue = double.negativeInfinity;
+      for (var v = 0; v < evidence.vocabSize; v++) {
+        final value = evidence.logprobs[offset + v];
+        if (value > bestValue) {
+          bestValue = value;
+          bestId = v;
+        }
+      }
+      if (bestId != evidence.blankId) return t;
+    }
+    return -1;
   }
 
   /// 在已排序候选中挑出「得分接近最优且最长」的稳定前缀。
