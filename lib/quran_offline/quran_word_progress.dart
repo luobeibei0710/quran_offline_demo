@@ -58,11 +58,17 @@ class QuranWordProgress {
     if (wordTokens.isEmpty) return 0;
 
     // 逐词累加 token 前缀并打分（跳过不可行的前缀）
+    //
+    // 这里沿用**按 token** 口径：最优前缀位置与按帧口径一致（两者只差一个常数
+    // 因子），差异只在容差带的尺度 —— 而 [defaultTolerance] 正是在该口径下标定的，
+    // 保留口径即可不动这个已调好的常数（见 [CtcNormalization]）。
     final prefix = <int>[];
     final scores = <double>[];
     for (final group in wordTokens) {
       prefix.addAll(group);
-      scores.add(CtcScorer.scoreSequence(evidence, prefix));
+      scores.add(
+        CtcScorer.scoreSequence(evidence, prefix, normalize: CtcNormalization.perToken),
+      );
     }
 
     // 找到分数最低（最匹配）的前缀位置

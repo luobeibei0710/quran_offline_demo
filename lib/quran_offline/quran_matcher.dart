@@ -4,9 +4,9 @@
 /// 1. **文本召回**：用识别文本的首词做倒排锚点，再用编辑相似度筛出 top-K 候选，
 ///    避免对 6236 节全量做昂贵比对；
 /// 2. **CTC 精排**：把候选（含 2–6 节连读的跨度）的 token 序列送入 CTC
-///    前向后向算法，取平均负对数似然最小的候选作为冠军。
+///    前向后向算法，取每帧平均负对数似然最小的候选作为冠军。
 ///
-/// 实测（6 秒音频）：召回 117 个候选，冠军 acoustic=0.074，与次优差距 1.18。
+/// 打分与跨度惩罚的标定数据见 `tools/quran_offline/tune_span_penalty.py`。
 library;
 
 import 'ctc_scorer.dart';
@@ -47,7 +47,7 @@ class VerseMatchCandidate {
   /// 文本召回得分。
   final double textScore;
 
-  /// CTC 平均负对数似然（纯声学证据，用于展示与横向比较）。
+  /// CTC 每帧平均负对数似然（纯声学证据，用于展示与横向比较）。
   final double acousticScore;
 
   /// 排序分 = [acousticScore] + 跨度惩罚，仅用于候选排序。
@@ -103,8 +103,7 @@ class VerseMatchResult {
     if (runnersUp.isEmpty) return 1.0;
     final margin = runnersUp.first.sortScore - best.sortScore;
     if (margin <= 0) return 0.0;
-    // 经验映射：差距 0.15 以上即认为非常明确
-    return (margin / 0.15).clamp(0.0, 1.0);
+    return (margin / QuranMatcher.confidenceFullMargin).clamp(0.0, 1.0);
   }
 }
 
@@ -144,6 +143,12 @@ class QuranMatcher {
   /// 默认最大连读跨度（节）。
   static const int defaultMaxSpan = 4;
 
+  /// 置信度映射用的「满分差距」：与次优的排序分差距达到该值即认为非常明确。
+  ///
+  /// 打分改按帧口径后分数尺度约为原来的 1/10（比例 ≈ token 数 / 帧数），
+  /// 故由旧值 0.15 调整为 0.02。
+  static const double confidenceFullMargin = 0.02;
+
   /// 太斯米（بسم الله الرحمن الرحيم）对应的 token 序列。
   ///
   /// 词表中太斯米固定为这 5 个 token。部分经文的 token 表把太斯米并入「本章
@@ -154,11 +159,14 @@ class QuranMatcher {
 
   /// 连读跨度惩罚系数（每多连读一节，加在排序分上的惩罚）。
   ///
-  /// CTC 平均对数似然对长序列存在系统性偏好：token 越多，分母越大，且多出的
-  /// token 还能「吸收」音频中的前缀/噪声帧，从而把平均损失压低。结果是单节
-  /// 诵读容易被判成多节连读。加一个与跨度成正比的惩罚，使多节候选必须在声学
-  /// 上明显更优（差 > 该系数）时才胜出。
-  static const double defaultSpanPenalty = 0.35;
+  /// 打分已按**帧数**归一化（见 [CtcScorer.scoreSequence]），「token 越多分母越大」
+  /// 的系统性偏好已消除，因此这里只需一个很小的安全余量：多节候选必须在声学上
+  /// 更优（每多一节差 > 该系数）才胜出。
+  ///
+  /// 取值依据 `tools/quran_offline/tune_span_penalty.py`：官方 5 条样本下，「正确单节」
+  /// 与「最佳跨度扩展」的按帧分数差距最小为 0.335（`1:2`），故系数必须 < 0.335；
+  /// 取 0.1 为跨平台（x86 / ARM）差异留出余量。
+  static const double defaultSpanPenalty = 0.1;
 
   /// 文本召回。
   ///

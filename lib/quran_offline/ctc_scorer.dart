@@ -38,6 +38,26 @@ class AcousticEvidence {
   final int blankId;
 }
 
+/// CTC 打分的归一化口径。
+///
+/// 两种口径的差异只在**尺度**（同一候选按帧 = 按 token × token 数 / 帧数），
+/// 因此「最优位置」不会变，但**容差带**的尺度会变：
+///
+/// - [perFrame]：除以帧数。同一段音频帧数是常数，因此不同**长度**的候选处于同一
+///   口径，适合「多候选横向比较」（召回精排、跨度判定）。若用 [perToken]，token
+///   越多分母越大，长序列会系统性占优（实测设备端因此把单节判成多节连读）。
+/// - [perToken]：除以 token 数。用于「同一候选的前缀递增比较」（已读词估算）：
+///   最优前缀位置与 [perFrame] 相同，但该处使用的容差常数
+///   （[QuranWordProgress.defaultTolerance]）是在此口径下标定的，保留口径即可
+///   避免连带重标定。
+enum CtcNormalization {
+  /// 除以帧数（跨长度候选比较）。
+  perFrame,
+
+  /// 除以 token 数（同候选前缀比较）。
+  perToken,
+}
+
 /// CTC 打分工具。
 class CtcScorer {
   CtcScorer._();
@@ -50,13 +70,20 @@ class CtcScorer {
 
   /// 计算候选 token 序列的平均负对数似然（越小越匹配）。
   ///
-  /// 使用标准 CTC 前向后向（log 域）算法，返回 `-logP(seq) / len(seq)`，
-  /// 便于不同长度候选之间横向比较。
+  /// 使用标准 CTC 前向后向（log 域）算法；默认按**帧数**归一化（见 [CtcNormalization]）。
+  /// 选按帧是因为跨长度候选比较时，按 token 归一化会让长序列系统性占优 —— 实测
+  /// 设备端因此把单节诵读判成 `112:1-3`，而正确单节在按帧口径下以 5 倍差距胜出
+  /// （标定数据见 `tools/quran_offline/tune_span_penalty.py`）。
   ///
   /// @param evidence 声学证据
   /// @param ids 候选 token 序列
+  /// @param normalize 归一化口径，默认 [CtcNormalization.perFrame]
   /// @return 平均负对数似然；不可行时返回 [impossibleScore]
-  static double scoreSequence(AcousticEvidence evidence, List<int> ids) {
+  static double scoreSequence(
+    AcousticEvidence evidence,
+    List<int> ids, {
+    CtcNormalization normalize = CtcNormalization.perFrame,
+  }) {
     final targetLength = ids.length;
     if (targetLength == 0) return impossibleScore;
     if (minFramesRequired(targetLength) > evidence.timeSteps) return impossibleScore;
@@ -102,10 +129,14 @@ class CtcScorer {
     if (finalScore.isNaN || finalScore == double.negativeInfinity || !finalScore.isFinite) {
       return impossibleScore;
     }
-    return -finalScore / targetLength;
+    final divisor = normalize == CtcNormalization.perFrame ? evidence.timeSteps : targetLength;
+    return -finalScore / divisor;
   }
 
   /// 在已排序候选中挑出「得分接近最优且最长」的稳定前缀。
+  ///
+  /// 候选之间 token 长度不同，故 [scores] 应取 [CtcNormalization.perFrame] 口径
+  /// （按 token 口径下长候选会因分母更大而系统性占优）。
   ///
   /// 与 Tilawa 的 `chooseLongestStablePrefix` 一致：按 [tolerance] 允许的分数
   /// 波动范围内，选择 token 数最多的候选，避免过早锁定过短的经文。
