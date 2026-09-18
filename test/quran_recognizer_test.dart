@@ -268,6 +268,36 @@ void main() {
 
       await session.dispose();
     });
+
+    test('环境噪声上升时会话本底缓慢回升', () async {
+      final (session, _, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+        ),
+      );
+
+      // 先在低电平噪声下确立本底
+      for (var i = 0; i < 3; i++) {
+        await session.feed(buildSteadyNoiseSamples(1.0, level: 0.006));
+        await pumpEventQueue();
+      }
+      final low = session.quietBaseline;
+      expect(low, greaterThan(0));
+
+      // 噪声电平翻倍：本底每轮最多回升 2%，多轮后应高于初始值
+      for (var i = 0; i < 60; i++) {
+        await session.feed(buildSteadyNoiseSamples(1.0, level: 0.012));
+        await pumpEventQueue();
+      }
+
+      // 回落到新电平附近（噪声夹具带 ±5% 抖动，故上界留出抖动余量）
+      expect(session.quietBaseline, greaterThan(low));
+      expect(session.quietBaseline, lessThan(0.0135));
+
+      await session.dispose();
+    });
   });
 
   group('已确认进度（committed sequence）', () {

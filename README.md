@@ -30,7 +30,7 @@ ONNX Runtime（原生：Android AAR / iOS onnxruntime-objc）—— 只做张量
    ├─ 贪心 CTC 解码（TextCtcDecoder）
    ├─ 文本召回（分词倒排 + 覆盖率/编辑相似度）
    ├─ CTC 约束精排（前向后向对数似然）→ surah:ayah
-   ├─ 词级进度（逐词前缀 CTC 打分）→ 提词器高亮
+   ├─ 词级进度（CTC 强制对齐的内容区判定）→ 提词器高亮
    ├─ 能量 VAD 门控（峰值/本底信噪比）→ 过滤噪声窗口
    └─ 转写拼接 + 词级对齐（动态规划）→ 原文 / 转写比对
    ↓
@@ -187,7 +187,7 @@ x_q → DequantizeLinear(x_q, x_scale, x_zp) → Conv(x_dq, w_fp32)
 | 窗口范围 | `minWindowSeconds=1.2`、`maxWindowSeconds=15` | 太短的窗口不识别；识别时只取最近 15 s |
 | 静音收尾 | `silenceRmsThreshold=0.012`、`finalSilenceSeconds=1.5` | 连续静音 1.5 s 判定一段诵读结束 |
 | 稳定锁定 | `stableRounds=2` | 连续多轮命中同一章节才标记为「稳定」，避免逐帧抖动 |
-| 词级进度 | 见 `QuranWordProgress` | 对「前 k 个词」的 token 前缀分别做 CTC 打分，取分数处于最优容差内的最长前缀，即为已读词数 |
+| 词级进度 | `QuranWordProgress` | 对候选序列做**帧级强制对齐**（`CtcScorer.alignFrames`），把被 CTC 挤到音频内容区之后的 token 判为「尚未念到」，取前缀词数即已读词数（`estimateReadWords`，不依赖容差常数）；序列帧数不足时回退到「前缀 CTC 打分 + 容差」（`estimateReadWordsByPrefix`） |
 | 召回 + 精排 | `topK=64`、`maxSpan=4`、`spanPenalty=0.1` | 召回候选数、最大连读跨度、跨度惩罚系数（打分按帧归一化后的重标定值，见 `tools/quran_offline/tune_span_penalty.py`） |
 | 已确认进度 | `commitWordRatio=0.6` | 稳定命中且已读词达该比例时提交一节到 `committedSequence`，使长诵读进度单调推进（同一节不重复提交） |
 
@@ -195,7 +195,7 @@ x_q → DequantizeLinear(x_q, x_scale, x_zp) → Conv(x_dq, w_fp32)
 
 ```bash
 flutter analyze   # 静态分析
-flutter test      # 82 个用例
+flutter test      # 98 个用例
 ```
 
 测试**不依赖** `assets/quran_offline/` 下的真实资产：用例通过 `FakeAssetBundle` 注入最小化的
@@ -278,12 +278,13 @@ docs/                                               验证记录、平台联调�
   `tracker.ts` 的帧级对齐与窗口推进（识别仍在 15 s 滑窗上重复进行）。
 - **模型体积**：移动端加载 130 MB 改造版模型（124.6 MiB），debug APK 约 300 MB；
   正式交付需按需下载模型或只打单 ABI。
-- **提词器精度未定量评估**：`QuranWordProgress.defaultTolerance`（0.35）尚未按真人朗读调参；
-  默认主区走整句样式，提词器逻辑保留且有单元测试覆盖。
+- **提词器精度未定量评估**：已读词估算改为帧级强制对齐（不依赖容差常数；回退路径仍用
+  `defaultTolerance=0.35`），但高亮「滞后/超前」的量还没有按真人朗读实测；默认主区走整句样式，
+  提词器逻辑保留且有单元测试覆盖。
+- **置信度是启发式**：按「与次优的相对差距（15%）」映射，完美匹配与长窗口下会饱和到 1.00，
+  仅用于界面提示，不参与判定。
 - **iOS 未做真机验证**：模拟器已跑通模型加载、推理与内置样本自测，真机签名、麦克风实采与性能
   尚未验证，见 [docs/ios.md](docs/ios.md)。
-- **流式仍是工程化简版**：滑窗重复识别 + 稳定锁定 + 词级前缀进度，尚未移植 Tilawa `tracker.ts`
-  的词级对齐与推进策略。
 - **样本未入库**：`sample_*.wav` 与模型一样不进版本库，clone 后需自行准备，否则内置样本验证
   会逐条报「识别失败」。
 

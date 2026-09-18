@@ -216,11 +216,15 @@ class QuranStreamingSession {
   String? _lastStableRef;
   int _stableCount = 0;
 
-  /// 会话内「最安静的窗口本底」（各窗口中位数的最小值），用于自适应语音门控。
+  /// 会话内「最安静的窗口本底」，用于自适应语音门控。
   ///
-  /// 只降不升：一旦出现过安静段就以它作为环境本底，避免被一段朗读抬高门槛。
+  /// 更新规则：向下立即跟随（取较小者），向上每轮最多回升 [_quietBaselineRise] ——
+  /// 既跟随环境噪声缓慢上升，又不会被一段朗读把门槛立刻抬高。
   /// 不随 [reset] 清零（这是环境属性，而非单次诵读的状态）。
   double _quietBaseline = 0;
+
+  /// 本底每轮最多回升比例（2%，约对应一分钟量级的跟随时间常数）。
+  static const double _quietBaselineRise = 1.02;
 
   /// 已确认章节序列（稳定命中且读满阈值后提交，同一节只提交一次）。
   final List<String> _committedRefs = <String>[];
@@ -423,8 +427,10 @@ class QuranStreamingSession {
     final median = frames[frames.length ~/ 2];
     final peak = frames[((frames.length - 1) * 0.9).round()];
 
-    // 会话级本底：只降不升，作为「这个环境最安静能有多安静」的估计
-    _quietBaseline = _quietBaseline == 0 ? median : math.min(_quietBaseline, median);
+    // 会话级本底：向下立即跟随，向上每轮最多回升 2%
+    //（跟随环境噪声缓慢上升，又不会被一段朗读把门槛立刻抬高）
+    final risen = _quietBaseline == 0 ? median : _quietBaseline * _quietBaselineRise;
+    _quietBaseline = math.min(median, risen);
 
     // 三层判据（与绝对电平解耦，适应远场 / 低音量收音）：
     // 1. 音频内信噪比：峰值 ≥ 最近 2 s 本底 × snrRatio；

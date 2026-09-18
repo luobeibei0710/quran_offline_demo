@@ -94,16 +94,19 @@ class VerseMatchResult {
   /// 文本召回阶段的候选数量。
   final int recallCount;
 
-  /// 冠军的置信度（0..1）：由与次优的 acoustic 差距映射而来。
+  /// 冠军的置信度（0..1）：由与次优的排序分差距按**相对尺度**映射而来。
   ///
-  /// 差距越大越可信；无次优候选时按满分处理。
+  /// 差距越大越可信；无次优候选时按满分处理；最优分接近 0（完美匹配）时
+  /// 直接按满分处理，避免除以近零的尺度。
   double get confidence {
     final best = champion;
     if (best == null) return 0.0;
     if (runnersUp.isEmpty) return 1.0;
     final margin = runnersUp.first.sortScore - best.sortScore;
     if (margin <= 0) return 0.0;
-    return (margin / QuranMatcher.confidenceFullMargin).clamp(0.0, 1.0);
+    final scale = best.sortScore.abs() * QuranMatcher.confidenceRelativeMargin;
+    if (scale <= 1e-9) return 1.0;
+    return (margin / scale).clamp(0.0, 1.0);
   }
 }
 
@@ -143,11 +146,12 @@ class QuranMatcher {
   /// 默认最大连读跨度（节）。
   static const int defaultMaxSpan = 4;
 
-  /// 置信度映射用的「满分差距」：与次优的排序分差距达到该值即认为非常明确。
+  /// 置信度映射用的**相对**差距：与次优的排序分差距达到最优分的该比例即认为非常明确。
   ///
-  /// 打分改按帧口径后分数尺度约为原来的 1/10（比例 ≈ token 数 / 帧数），
-  /// 故由旧值 0.15 调整为 0.02。
-  static const double confidenceFullMargin = 0.02;
+  /// 用相对值而非绝对值，是为了与打分口径/窗口长度解耦 —— 分数是「每帧」量纲，
+  /// 绝对值随窗口长度变化，固定常数会在不同窗口长度下表现不一致（曾出现正确结果
+  /// 置信度只有 0.22 的失真）。
+  static const double confidenceRelativeMargin = 0.15;
 
   /// 太斯米（بسم الله الرحمن الرحيم）对应的 token 序列。
   ///
