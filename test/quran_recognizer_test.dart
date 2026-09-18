@@ -228,4 +228,117 @@ void main() {
       await session.dispose();
     });
   });
+
+  group('能量 VAD 与绝对电平解耦', () {
+    test('弱语音也能通过门控（旧口径的固定下限会整段跳过）', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+        ),
+      );
+
+      // 峰值 0.02 / 本底 0.006：信噪比约 3.3，但峰值低于旧下限 speechRmsThreshold=0.03
+      await session.feed(buildSpeechLikeSamples(0.5, peak: 0.02, base: 0.006));
+      await pumpEventQueue();
+
+      expect(events, hasLength(1));
+      expect(events.single.champion?.ref, '1:1');
+      expect(session.quietBaseline, greaterThan(0));
+
+      await session.dispose();
+    });
+
+    test('稳态噪声不触发（放宽下限后仍不误触发）', () async {
+      final (session, events, runner) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+        ),
+      );
+
+      // 幅值 0.02 但几乎不波动：峰值/本底 ≈ 1.1，低于 speechSnrRatio=2.5
+      await session.feed(buildSteadyNoiseSamples(1.0, level: 0.02));
+      await pumpEventQueue();
+
+      expect(events, isEmpty);
+      expect(runner.runCount, 0);
+
+      await session.dispose();
+    });
+  });
+
+  group('已确认进度（committed sequence）', () {
+    test('稳定命中且读满阈值后提交一次，后续轮次不重复提交', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+          stableRounds: 2,
+        ),
+      );
+
+      for (var round = 0; round < 3; round++) {
+        await session.feed(buildSpeechLikeSamples(0.2));
+        await pumpEventQueue();
+      }
+
+      expect(events.map((event) => event.stable).toList(), <bool>[false, true, true]);
+      expect(events.where((event) => event.justCommitted), hasLength(1));
+      expect(events.first.committedSequence, isEmpty);
+      expect(events.last.committedRef, '1:1');
+      expect(events.last.committedSequence, <String>['1:1']);
+
+      await session.dispose();
+    });
+
+    test('收尾保留已确认序列（跨段累加），用户重置才清空', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 0.2,
+          stableRounds: 2,
+          silenceRmsThreshold: 0.012,
+        ),
+      );
+
+      await session.feed(buildSpeechLikeSamples(0.2));
+      await pumpEventQueue();
+      await session.feed(buildSpeechLikeSamples(0.2));
+      await pumpEventQueue();
+      expect(session.committedSequence, <String>['1:1']);
+
+      await session.feed(Float32List(3200)); // 0.2 s 静音 → 收尾识别
+      await pumpEventQueue();
+      expect(events.last.isFinal, isTrue);
+      expect(session.committedSequence, <String>['1:1']);
+
+      session.reset();
+      expect(session.committedSequence, isEmpty);
+      expect(session.lastStableRef, isNull);
+
+      await session.dispose();
+    });
+  });
+}
+
+/// 构造一个收集事件的流式会话（VAD 与已确认进度用例复用）。
+///
+/// @param config 流式配置
+/// @return `(会话, 事件列表, 脚本化推理桥)`
+Future<(QuranStreamingSession, List<QuranRecognitionEvent>, ScriptedOrtRunner)>
+    startSessionWithEvents(QuranStreamingConfig config) async {
+  final assets = await loadFixtureAssets();
+  final runner = ScriptedOrtRunner(
+    buildAlignedEvidence(<int>[FixtureTokens.bism, FixtureTokens.allah]),
+  );
+  final recognizer = QuranRecognizer(assets: assets, runner: runner, config: config);
+  final session = recognizer.createSession();
+  final events = <QuranRecognitionEvent>[];
+  session.events.listen(events.add);
+  return (session, events, runner);
 }

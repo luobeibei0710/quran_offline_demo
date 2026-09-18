@@ -72,6 +72,12 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
   /// 麦克风分块计数（用于周期性输出电平诊断）。
   int _micFrames = 0;
 
+  /// 本次采集的峰值电平（RMS），用于「收音偏弱」自检。
+  double _micPeak = 0;
+
+  /// 判定「收音偏弱」的峰值下限：正常朗读或贴近外放应明显高于该值。
+  static const double _weakLevelRms = 0.02;
+
   @override
   void initState() {
     super.initState();
@@ -153,6 +159,8 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     _session = session;
     _history.clear();
     _stableCommitCount = 0;
+    _micFrames = 0;
+    _micPeak = 0;
     // 新一轮诵读：清空上一轮的转写稿
     _stitcher.reset();
 
@@ -175,6 +183,10 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
             '进度=${event.readWords}/${event.words.length} '
             '${event.audioSeconds.toStringAsFixed(1)}s');
       }
+      // 已确认进度：稳定命中且读满阈值时提交一次，序列单调推进
+      if (event.justCommitted) {
+        _log('已确认 ${event.committedRef}（累计 ${event.committedSequence.length} 节）');
+      }
     }, onError: (Object error) => _log('识别异常 $error'));
 
     final micStream = await _recorder.startStream(
@@ -188,10 +200,11 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       (data) {
         final samples = _pcm16ToFloat32(data);
         _micLevel = _rms(samples);
+        final level = _micLevel <= 0 ? 0.0 : math.sqrt(_micLevel);
+        if (level > _micPeak) _micPeak = level;
         // 诊断：周期性输出麦克风 RMS，用于校准静音/语音门控阈值
         _micFrames++;
         if (_micFrames % 20 == 0) {
-          final level = _micLevel <= 0 ? 0.0 : math.sqrt(_micLevel);
           _log('麦克风 RMS=${level.toStringAsFixed(4)}');
         }
         unawaited(session.feed(samples));
@@ -212,6 +225,15 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
         _log('警告：麦克风无输入（RMS=0），请检查权限或麦克风隐私开关');
         setState(() => _status = '麦克风无输入，请检查权限');
       }
+    });
+
+    // 自检：采集 6 秒后峰值仍远低于正常朗读水平 → 提示收音偏弱
+    //（否则多数窗口会被 VAD 跳过，转写与比对指标会因此失真）
+    Timer(const Duration(seconds: 6), () {
+      if (_phase != _Phase.recording || _micLevel <= 0 || _micPeak >= _weakLevelRms) return;
+      _log('提示：收音偏弱（峰值 RMS=${_micPeak.toStringAsFixed(4)} < '
+          '${_weakLevelRms.toStringAsFixed(3)}），建议靠近音源或提高音量');
+      setState(() => _status = '收音偏弱：请靠近音源或提高音量');
     });
   }
 
@@ -668,8 +690,10 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
           Text(
             '${champion.verse.surahName} · ${champion.verse.surahNameEn}    '
             '置信度 ${match?.confidence.toStringAsFixed(2) ?? '-'} · '
-            '声学分 ${champion.acousticScore.toStringAsFixed(1)} · '
+            '声学分 ${champion.acousticScore.toStringAsFixed(3)} · '
             '进度 ${_latest?.readWords ?? 0}/${_latest?.words.length ?? 0} · '
+            '已确认 ${_latest?.committedSequence.length ?? 0} 节'
+            '${_latest?.committedRef == null ? '' : '（最近 ${_latest!.committedRef}）'} · '
             '窗口 ${_latest?.audioSeconds.toStringAsFixed(0) ?? '-'}s',
             style: const TextStyle(fontSize: 11, color: Colors.black45),
           ),

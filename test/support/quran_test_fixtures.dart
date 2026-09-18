@@ -6,6 +6,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -210,18 +211,52 @@ AcousticEvidence buildAlignedEvidence(
 
 /// 生成「类语音」测试音频：20 ms 帧中每 5 帧取一帧高幅，其余为本底低幅。
 ///
-/// 用于驱动 [QuranStreamingSession] 的能量 VAD：峰值（0.2）显著高于中位数
-/// （0.001），满足「峰值 ≥ max(中位数 × 信噪比, 绝对下限)」判据；
-/// 同时整块 RMS 高于静音阈值，不会误判为静音。
+/// 用于驱动 [QuranStreamingSession] 的能量 VAD：峰值显著高于中位数
+/// （默认 0.2 vs 0.001，比值 200），满足信噪比判据；同时整块 RMS 高于静音阈值，
+/// 不会误判为静音。
+///
+/// 通过 [peak] / [base] 可构造不同电平的信号：两者按同比例缩小即「弱语音」
+/// （用于验证门控与绝对电平解耦），把 [peak] 调到接近 [base] 即「稳态噪声」。
 ///
 /// @param seconds 时长（秒）
+/// @param peak 高幅帧幅值
+/// @param base 本底帧幅值
 /// @return 16 kHz 单声道 float32 采样
-Float32List buildSpeechLikeSamples(double seconds) {
+Float32List buildSpeechLikeSamples(
+  double seconds, {
+  double peak = 0.2,
+  double base = 0.001,
+}) {
   const frameLength = 320; // 20 ms @ 16 kHz
   final total = (seconds * 16000).round();
   final samples = Float32List(total);
   for (var i = 0; i < total; i++) {
-    samples[i] = (i ~/ frameLength) % 5 == 0 ? 0.2 : 0.001;
+    samples[i] = (i ~/ frameLength) % 5 == 0 ? peak : base;
+  }
+  return samples;
+}
+
+/// 生成「稳态噪声」测试音频：帧能量几乎不波动（±10% 随机抖动）。
+///
+/// 用于验证 VAD 不会把空调/风扇这类稳态底噪判成语音：峰值与中位数接近，
+/// 信噪比判据应当拒绝它。
+///
+/// @param seconds 时长（秒）
+/// @param level 噪声幅值
+/// @param seed 抖动随机种子（保证测试可复现）
+/// @return 16 kHz 单声道 float32 采样
+Float32List buildSteadyNoiseSamples(double seconds, {double level = 0.02, int seed = 7}) {
+  const frameLength = 320; // 20 ms @ 16 kHz
+  final total = (seconds * 16000).round();
+  final samples = Float32List(total);
+  final random = math.Random(seed);
+  var amplitude = level;
+  for (var i = 0; i < total; i++) {
+    if (i % frameLength == 0) {
+      // 每隔一帧轻微抖动：峰值/中位数 ≈ 1.1，远低于信噪比门限
+      amplitude = level * (0.95 + random.nextDouble() * 0.1);
+    }
+    samples[i] = amplitude;
   }
   return samples;
 }

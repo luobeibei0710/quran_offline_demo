@@ -30,6 +30,8 @@ class QuranRecognitionEvent {
     required this.audioSeconds,
     this.words = const <String>[],
     this.readWords = 0,
+    this.committedSequence = const <String>[],
+    this.justCommitted = false,
   });
 
   /// 匹配结果（含冠军与候选）。
@@ -55,6 +57,18 @@ class QuranRecognitionEvent {
 
   /// 提词器用：已读词数（0..[words].length）。
   final int readWords;
+
+  /// 已确认的章节序列（稳定命中且读满阈值后提交，按提交顺序）。
+  ///
+  /// 流式会话每轮都对窗口重新识别，界面若只跟「本轮冠军」会在同一节内来回跳；
+  /// 该序列给出单调推进的「已确认读到哪几节」，供界面展示与日志核对。
+  final List<String> committedSequence;
+
+  /// 本次事件是否刚刚提交了新的一节。
+  final bool justCommitted;
+
+  /// 最近一次确认的章节；尚未提交过时返回 null。
+  String? get committedRef => committedSequence.isEmpty ? null : committedSequence.last;
 }
 
 /// 流式识别配置。
@@ -67,8 +81,10 @@ class QuranStreamingConfig {
     this.stableRounds = 2,
     this.silenceRmsThreshold = 0.012,
     this.finalSilenceSeconds = 1.5,
-    this.speechRmsThreshold = 0.03,
+    this.speechRmsThreshold = 0.004,
     this.speechSnrRatio = 2.5,
+    this.speechQuietFloorRatio = 2.0,
+    this.commitWordRatio = 0.6,
     this.topK = QuranMatcher.defaultTopK,
     this.maxSpan = QuranMatcher.defaultMaxSpan,
     this.spanPenalty = QuranMatcher.defaultSpanPenalty,
@@ -92,9 +108,12 @@ class QuranStreamingConfig {
   /// 判定不出来，从而持续对噪声做识别。
   final double silenceRmsThreshold;
 
-  /// 语音峰值绝对下限（RMS）：峰值低于该值一定不判为语音。
+  /// 极低电平兜底（RMS）：峰值低于该值一定不判为语音。
   ///
-  /// 实测手机在安静房间的底噪 RMS 约 0.012~0.035，故下限取 0.03。
+  /// 只用于排除「纯数值噪声」，不承担环境底噪判别（那是 [speechSnrRatio] 与
+  /// [speechQuietFloorRatio] 的职责）。原取 0.03 的固定下限会把远场 / 低音量收音
+  /// 整段挡掉 —— 实测「Mac 外放 + 手机收音」时 RMS 仅 0.003~0.026，导致多数窗口
+  /// 被跳过、比对指标失真，故下调为 0.004。
   final double speechRmsThreshold;
 
   /// 语音信噪比判据：窗内 20 ms 帧能量的 90 分位需高于中位数的该倍数。
@@ -102,6 +121,18 @@ class QuranStreamingConfig {
   /// 语音有明显音节起伏（峰值远高于本底），稳态噪声则峰值接近本底。
   /// 用比值而非固定阈值，才能适应不同环境的底噪差异。
   final double speechSnrRatio;
+
+  /// 会话级本底判据：峰值还需 ≥ 会话内「最安静的窗口本底」× 该系数。
+  ///
+  /// 与 [speechSnrRatio]（最近 2 s 内部比较）互补：本项是会话级比较，
+  /// 保证「此刻明显比这个环境最安静的时候响」，从而与绝对电平解耦。
+  final double speechQuietFloorRatio;
+
+  /// 提交「已确认章节」所需的已读词比例。
+  ///
+  /// 稳定命中且已读词达到该比例时把该节计入 [QuranRecognitionEvent.committedSequence]，
+  /// 使长诵读的进度单调推进（不再随窗口重识别来回跳）。
+  final double commitWordRatio;
 
   /// 静音多久后判定一次诵读结束。
   final double finalSilenceSeconds;
@@ -185,6 +216,22 @@ class QuranStreamingSession {
   String? _lastStableRef;
   int _stableCount = 0;
 
+  /// 会话内「最安静的窗口本底」（各窗口中位数的最小值），用于自适应语音门控。
+  ///
+  /// 只降不升：一旦出现过安静段就以它作为环境本底，避免被一段朗读抬高门槛。
+  /// 不随 [reset] 清零（这是环境属性，而非单次诵读的状态）。
+  double _quietBaseline = 0;
+
+  /// 已确认章节序列（稳定命中且读满阈值后提交，同一节只提交一次）。
+  final List<String> _committedRefs = <String>[];
+  String? _lastCommittedRef;
+
+  /// 会话内估计的安静本底（RMS），可用于界面提示收音强度。
+  double get quietBaseline => _quietBaseline;
+
+  /// 已确认章节序列（只读视图）。
+  List<String> get committedSequence => List<String>.unmodifiable(_committedRefs);
+
   /// 识别事件流。
   Stream<QuranRecognitionEvent> get events => _controller.stream;
 
@@ -231,8 +278,18 @@ class QuranStreamingSession {
     await _controller.close();
   }
 
-  /// 重置会话状态（开始新一次诵读）。
+  /// 重置会话状态（开始新一次诵读）：清空音频缓冲、稳定计数与已确认序列。
   void reset() {
+    _resetBuffers();
+    _committedRefs.clear();
+    _lastCommittedRef = null;
+  }
+
+  /// 清空音频缓冲与稳定计数。
+  ///
+  /// 收尾识别后由会话内部调用：一次诵读结束但**不清空已确认序列与本底估计**，
+  /// 这样「一节一节念、中间停顿」时进度仍能跨段累加。
+  void _resetBuffers() {
     _accumulated = Float32List(0);
     _secondsSinceTrigger = 0;
     _silenceSeconds = 0;
@@ -284,6 +341,7 @@ class QuranStreamingSession {
       // 提词器跟随：对齐出「已读到第几个词」（前缀可达性，见 QuranWordProgress）
       var words = const <String>[];
       var readWords = 0;
+      var spanWordCount = 0;
       if (champion != null) {
         final (spanWords, groups) = QuranWordProgress.alignedWords(
           _recognizer.assets,
@@ -291,10 +349,23 @@ class QuranStreamingSession {
           champion.ayahStart,
           champion.ayahEnd,
         );
+        spanWordCount = spanWords.length;
         readWords = QuranWordProgress.estimateReadWords(evidence, groups);
         // 提词器前瞻：附带下一节，保证界面始终存在「未读」区域可供对比
         final nextVerse = _recognizer.assets.verse(champion.surah, champion.ayahEnd + 1);
         words = nextVerse == null ? spanWords : [...spanWords, ...nextVerse.words];
+      }
+
+      // 已确认进度：稳定命中且读满阈值时提交一次（同一节不重复提交，序列单调推进）
+      var justCommitted = false;
+      if (stable &&
+          champion != null &&
+          spanWordCount > 0 &&
+          readWords / spanWordCount >= config.commitWordRatio &&
+          _lastCommittedRef != champion.ref) {
+        _lastCommittedRef = champion.ref;
+        _committedRefs.add(champion.ref);
+        justCommitted = true;
       }
 
       _controller.add(
@@ -306,6 +377,8 @@ class QuranStreamingSession {
           audioSeconds: audio.length / QuranRecognizer.sampleRate,
           words: words,
           readWords: readWords,
+          committedSequence: List<String>.unmodifiable(_committedRefs),
+          justCommitted: justCommitted,
         ),
       );
     } catch (error, stackTrace) {
@@ -313,7 +386,7 @@ class QuranStreamingSession {
     } finally {
       _busy = false;
       if (finalEvent) {
-        reset();
+        _resetBuffers();
       }
     }
   }
@@ -349,9 +422,18 @@ class QuranStreamingSession {
     frames.sort();
     final median = frames[frames.length ~/ 2];
     final peak = frames[((frames.length - 1) * 0.9).round()];
+
+    // 会话级本底：只降不升，作为「这个环境最安静能有多安静」的估计
+    _quietBaseline = _quietBaseline == 0 ? median : math.min(_quietBaseline, median);
+
+    // 三层判据（与绝对电平解耦，适应远场 / 低音量收音）：
+    // 1. 音频内信噪比：峰值 ≥ 最近 2 s 本底 × snrRatio；
+    // 2. 会话级本底倍数：峰值 ≥ 会话最安静本底 × quietFloorRatio；
+    // 3. 极低电平兜底：排除纯数值噪声。
+    final config = _recognizer.config;
     final required = math.max(
-      median * _recognizer.config.speechSnrRatio,
-      _recognizer.config.speechRmsThreshold,
+      math.max(median * config.speechSnrRatio, _quietBaseline * config.speechQuietFloorRatio),
+      config.speechRmsThreshold,
     );
     return peak >= required;
   }

@@ -39,6 +39,12 @@ class QuranComparePage extends StatefulWidget {
 }
 
 class _QuranComparePageState extends State<QuranComparePage> {
+  /// 转写覆盖率低于该值时提示「指标仅供参考」。
+  ///
+  /// 覆盖率低通常是抓音问题（VAD 跳过多数窗口）而非比对算法问题，
+  /// 见 `docs/android-device.md` 的实测数据。
+  static const double _lowCoverageThreshold = 0.35;
+
   ReferenceText? _reference;
   AlignmentResult? _result;
   String? _error;
@@ -115,6 +121,7 @@ class _QuranComparePageState extends State<QuranComparePage> {
     return Column(
       children: [
         _buildSummary(result, reference),
+        if (result.coverage < _lowCoverageThreshold) _buildLowCoverageBanner(result),
         _buildLegend(),
         _buildColumnHeader(),
         Expanded(child: _buildRows(result)),
@@ -209,6 +216,29 @@ class _QuranComparePageState extends State<QuranComparePage> {
           Text(
             '原文 ${result.referenceCount} 词（${reference.source}） · 转写 ${result.hypothesisCount} 词',
             style: const TextStyle(fontSize: 11, color: Colors.black45),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 低覆盖率提示条：把「指标偏低」归因到抓音/环境，避免误判为算法问题。
+  Widget _buildLowCoverageBanner(AlignmentResult result) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFFF3E0),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFE65100)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '转写覆盖率仅 ${result.coverage.toStringAsFixed(2)}：多为收音过弱或环境噪声导致 VAD 跳过'
+              '大部分窗口，而非比对算法问题。建议靠近音源、提高音量后重测。',
+              style: const TextStyle(fontSize: 11, color: Color(0xFFE65100)),
+            ),
           ),
         ],
       ),
