@@ -95,6 +95,36 @@ void main() {
       expect(readWords, 2);
     });
 
+    test('帧级对齐同时给出已读内容的结束帧', () {
+      final evidence = buildAlignedEvidence(
+        <int>[FixtureTokens.bism, FixtureTokens.allah],
+        trailingBlankFrames: 4,
+      );
+
+      final progress = QuranWordProgress.estimateReadProgress(evidence, <List<int>>[
+        <int>[FixtureTokens.bism],
+        <int>[FixtureTokens.allah],
+        <int>[FixtureTokens.alhamd],
+      ]);
+
+      expect(progress.readWords, 2);
+      // 第二个词（token 2）的发射帧为第 3 帧，末尾的 alhamd 被挤到内容区之后
+      expect(progress.endFrame, 3);
+    });
+
+    test('回退到前缀法时没有可用的帧位置', () {
+      // 5 帧证据下 [1,2,3] 不可行 → 走前缀法
+      final evidence = buildAlignedEvidence(<int>[FixtureTokens.bism, FixtureTokens.allah]);
+
+      final progress = QuranWordProgress.estimateReadProgress(evidence, <List<int>>[
+        <int>[FixtureTokens.bism],
+        <int>[FixtureTokens.allah, FixtureTokens.alhamd],
+      ]);
+
+      expect(progress.readWords, 1);
+      expect(progress.endFrame, -1);
+    });
+
     test('全 blank 音频（无可读内容）返回 0', () {
       final evidence = buildAlignedEvidence(const <int>[]);
 

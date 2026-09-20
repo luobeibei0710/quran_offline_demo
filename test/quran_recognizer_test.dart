@@ -35,6 +35,25 @@ void main() {
       expect(result.confidence, 1.0);
     });
 
+    test('声学上明显更优的多节连读仍能胜出（防止跨度惩罚过重）', () async {
+      final assets = await loadFixtureAssets();
+      // 证据对齐到 1:1 与 1:2 的连读序列 [1, 2, 3]
+      final runner = ScriptedOrtRunner(
+        buildAlignedEvidence(<int>[
+          FixtureTokens.bism,
+          FixtureTokens.allah,
+          FixtureTokens.alhamd,
+        ]),
+      );
+      final recognizer = QuranRecognizer(assets: assets, runner: runner);
+
+      final result = await recognizer.recognizeOnce(Float32List(QuranRecognizer.sampleRate));
+
+      // 单节候选需要把多出来的内容帧当空白，声学上明显更差，故连读跨度应当胜出
+      expect(result.champion?.ref, '1:1-2');
+      expect(result.champion?.isSpan, isTrue);
+    });
+
     test('精排会跳过帧数不足的多节连读跨度', () async {
       final assets = await loadFixtureAssets();
       final runner = ScriptedOrtRunner(
@@ -265,6 +284,50 @@ void main() {
 
       expect(events, isEmpty);
       expect(runner.runCount, 0);
+
+      await session.dispose();
+    });
+
+    test('提交已确认章节后窗口前移（裁掉已读音频并保留重叠）', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+          stableRounds: 1,
+          windowOverlapSeconds: 1.0,
+        ),
+      );
+
+      await session.feed(buildSpeechLikeSamples(3.0));
+      await pumpEventQueue();
+
+      expect(events.single.committedRef, '1:1');
+      // 3.0 s 音频对应 5 帧证据 → 每帧 0.6 s；已读内容结束于第 3 帧（= 2.4 s），
+      // 裁剪点 = 2.4 s − 1.0 s 重叠 = 1.4 s → 保留 3.0 − 1.4 = 1.6 s
+      expect(session.accumulatedSeconds, closeTo(1.6, 0.02));
+      expect(events.single.advancedSeconds, closeTo(1.4, 0.02));
+      expect(session.committedSequence, <String>['1:1']);
+
+      await session.dispose();
+    });
+
+    test('关闭窗口推进时不裁剪音频', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+          stableRounds: 1,
+          advanceWindowOnCommit: false,
+        ),
+      );
+
+      await session.feed(buildSpeechLikeSamples(3.0));
+      await pumpEventQueue();
+
+      expect(events.single.justCommitted, isTrue);
+      expect(session.accumulatedSeconds, closeTo(3.0, 0.02));
 
       await session.dispose();
     });

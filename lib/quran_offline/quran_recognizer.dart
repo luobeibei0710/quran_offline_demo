@@ -32,6 +32,7 @@ class QuranRecognitionEvent {
     this.readWords = 0,
     this.committedSequence = const <String>[],
     this.justCommitted = false,
+    this.advancedSeconds = 0,
   });
 
   /// 匹配结果（含冠军与候选）。
@@ -67,6 +68,11 @@ class QuranRecognitionEvent {
   /// 本次事件是否刚刚提交了新的一节。
   final bool justCommitted;
 
+  /// 本次事件因提交而裁掉的窗口时长（秒，0 表示未推进）。
+  ///
+  /// 便于观察「识别随进度前移」：窗口不再一直堆到 15 s，而是裁掉已读部分。
+  final double advancedSeconds;
+
   /// 最近一次确认的章节；尚未提交过时返回 null。
   String? get committedRef => committedSequence.isEmpty ? null : committedSequence.last;
 }
@@ -85,6 +91,8 @@ class QuranStreamingConfig {
     this.speechSnrRatio = 2.5,
     this.speechQuietFloorRatio = 2.0,
     this.commitWordRatio = 0.6,
+    this.advanceWindowOnCommit = true,
+    this.windowOverlapSeconds = 1.0,
     this.topK = QuranMatcher.defaultTopK,
     this.maxSpan = QuranMatcher.defaultMaxSpan,
     this.spanPenalty = QuranMatcher.defaultSpanPenalty,
@@ -133,6 +141,18 @@ class QuranStreamingConfig {
   /// 稳定命中且已读词达到该比例时把该节计入 [QuranRecognitionEvent.committedSequence]，
   /// 使长诵读的进度单调推进（不再随窗口重识别来回跳）。
   final double commitWordRatio;
+
+  /// 提交已确认章节后，是否把窗口前部已读的音频裁掉（让识别随进度前移）。
+  ///
+  /// 打开后窗口不会一直保留 15 s 历史音频：识别始终围绕「当前读到哪」进行，
+  /// 既减少已读内容对跨度/进度的干扰，也让长诵读的窗口长度保持稳定。
+  /// 裁剪量按帧级对齐的已读结束位置计算，并保留 [windowOverlapSeconds] 重叠。
+  final bool advanceWindowOnCommit;
+
+  /// 窗口推进时保留的重叠时长（秒）。
+  ///
+  /// 避免把音频切在词中间：重叠区内仍包含上一个已读词的完整发音。
+  final double windowOverlapSeconds;
 
   /// 静音多久后判定一次诵读结束。
   final double finalSilenceSeconds;
@@ -301,6 +321,31 @@ class QuranStreamingSession {
     _stableCount = 0;
   }
 
+  /// 按已读进度裁掉窗口前部（保留 [QuranStreamingConfig.windowOverlapSeconds] 重叠）。
+  ///
+  /// 帧 → 采样点的换算用「本次窗口采样点数 ÷ 证据帧数」，自动跟随模型帧率，
+  /// 不写死 hop 长度；窗口是累积音频的尾部切片时按窗口起点换算，避免错位。
+  ///
+  /// @param endFrame 已读内容在证据中的最后一帧（-1 表示不可用，不裁剪）
+  /// @param frames 证据总帧数
+  /// @param windowSamples 本次识别窗口的采样点数
+  /// @return 实际裁掉的时长（秒）；未裁剪时为 0
+  double _advanceWindow({
+    required int endFrame,
+    required int frames,
+    required int windowSamples,
+  }) {
+    if (endFrame < 0 || frames <= 0 || windowSamples <= 0) return 0;
+    final samplesPerFrame = windowSamples / frames;
+    final keep = (endFrame + 1) * samplesPerFrame -
+        _recognizer.config.windowOverlapSeconds * QuranRecognizer.sampleRate;
+    if (keep <= 0) return 0;
+    final trimAt = _accumulated.length - windowSamples + keep.round();
+    if (trimAt <= 0 || trimAt >= _accumulated.length) return 0;
+    _accumulated = _accumulated.sublist(trimAt);
+    return trimAt / QuranRecognizer.sampleRate;
+  }
+
   Future<void> _flush({required bool finalEvent}) async {
     if (_busy) return;
     final config = _recognizer.config;
@@ -346,6 +391,7 @@ class QuranStreamingSession {
       var words = const <String>[];
       var readWords = 0;
       var spanWordCount = 0;
+      QuranReadProgress? readProgress;
       if (champion != null) {
         final (spanWords, groups) = QuranWordProgress.alignedWords(
           _recognizer.assets,
@@ -354,7 +400,8 @@ class QuranStreamingSession {
           champion.ayahEnd,
         );
         spanWordCount = spanWords.length;
-        readWords = QuranWordProgress.estimateReadWords(evidence, groups);
+        readProgress = QuranWordProgress.estimateReadProgress(evidence, groups);
+        readWords = readProgress.readWords;
         // 提词器前瞻：附带下一节，保证界面始终存在「未读」区域可供对比
         final nextVerse = _recognizer.assets.verse(champion.surah, champion.ayahEnd + 1);
         words = nextVerse == null ? spanWords : [...spanWords, ...nextVerse.words];
@@ -372,6 +419,16 @@ class QuranStreamingSession {
         justCommitted = true;
       }
 
+      // 窗口推进：提交后裁掉已读部分的音频，让下一轮识别围绕当前位置进行
+      var advancedSeconds = 0.0;
+      if (justCommitted && config.advanceWindowOnCommit && readProgress != null) {
+        advancedSeconds = _advanceWindow(
+          endFrame: readProgress.endFrame,
+          frames: evidence.timeSteps,
+          windowSamples: audio.length,
+        );
+      }
+
       _controller.add(
         QuranRecognitionEvent(
           match: match,
@@ -383,6 +440,7 @@ class QuranStreamingSession {
           readWords: readWords,
           committedSequence: List<String>.unmodifiable(_committedRefs),
           justCommitted: justCommitted,
+          advancedSeconds: advancedSeconds,
         ),
       );
     } catch (error, stackTrace) {

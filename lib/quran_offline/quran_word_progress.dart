@@ -15,6 +15,27 @@ library;
 import 'ctc_scorer.dart';
 import 'quran_assets.dart';
 
+/// 已读进度的帧级结果。
+class QuranReadProgress {
+  /// 构造已读进度。
+  ///
+  /// @param readWords 已读词数
+  /// @param endFrame 已读内容在声学证据中的最后一帧；无可用位置时为 -1
+  const QuranReadProgress({required this.readWords, required this.endFrame});
+
+  /// 已读词数（0..词数）。
+  final int readWords;
+
+  /// 已读内容在证据中的最后一帧（-1 表示不可用，例如走了前缀法回退路径）。
+  ///
+  /// 会话层用它把窗口前部已读的音频裁掉，使识别随进度推进（见
+  /// `QuranStreamingConfig.advanceWindowOnCommit`）。
+  final int endFrame;
+
+  @override
+  String toString() => 'QuranReadProgress(readWords=$readWords, endFrame=$endFrame)';
+}
+
 /// 词级跟随进度。
 class QuranWordProgress {
   QuranWordProgress._();
@@ -57,8 +78,22 @@ class QuranWordProgress {
   /// @param evidence 声学证据（本轮窗口）
   /// @param wordTokens 按词分组后的 token 序列
   /// @return 已读词数（0..wordTokens.length）
-  static int estimateReadWords(AcousticEvidence evidence, List<List<int>> wordTokens) {
-    if (wordTokens.isEmpty) return 0;
+  static int estimateReadWords(AcousticEvidence evidence, List<List<int>> wordTokens) =>
+      estimateReadProgress(evidence, wordTokens).readWords;
+
+  /// 估算已读进度（帧级强制对齐），同时给出已读内容的**结束帧位置**。
+  ///
+  /// 与 [estimateReadWords] 同一算法，额外返回 [QuranReadProgress.endFrame]，
+  /// 供会话层裁剪窗口前部（识别随进度推进）。
+  ///
+  /// @param evidence 声学证据（本轮窗口）
+  /// @param wordTokens 按词分组后的 token 序列
+  /// @return 已读词数与结束帧；位置不可用时 [QuranReadProgress.endFrame] 为 -1
+  static QuranReadProgress estimateReadProgress(
+    AcousticEvidence evidence,
+    List<List<int>> wordTokens,
+  ) {
+    if (wordTokens.isEmpty) return const QuranReadProgress(readWords: 0, endFrame: -1);
 
     final flat = <int>[];
     final tokenCounts = <int>[];
@@ -66,22 +101,30 @@ class QuranWordProgress {
       flat.addAll(group);
       tokenCounts.add(group.length);
     }
-    if (flat.isEmpty) return 0;
+    if (flat.isEmpty) return const QuranReadProgress(readWords: 0, endFrame: -1);
 
     final spans = CtcScorer.alignFrames(evidence, flat);
-    if (spans == null) return estimateReadWordsByPrefix(evidence, wordTokens);
+    if (spans == null) {
+      // 帧数不足（序列不可行）：退回前缀法，此时没有可用的帧位置
+      return QuranReadProgress(
+        readWords: estimateReadWordsByPrefix(evidence, wordTokens),
+        endFrame: -1,
+      );
+    }
 
     final contentEnd = CtcScorer.lastContentFrame(evidence);
-    if (contentEnd < 0) return 0;
+    if (contentEnd < 0) return const QuranReadProgress(readWords: 0, endFrame: -1);
 
     var readWords = 0;
     var tokenIndex = 0;
+    var endFrame = -1;
     for (final count in tokenCounts) {
       if (spans[tokenIndex].start > contentEnd) break;
+      endFrame = spans[tokenIndex + count - 1].end;
       readWords++;
       tokenIndex += count;
     }
-    return readWords;
+    return QuranReadProgress(readWords: readWords, endFrame: endFrame);
   }
 
   /// 前缀打分法估算已读词数（[estimateReadWords] 的回退路径）。

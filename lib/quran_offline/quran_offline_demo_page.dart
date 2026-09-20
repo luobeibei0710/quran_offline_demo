@@ -185,7 +185,9 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       }
       // 已确认进度：稳定命中且读满阈值时提交一次，序列单调推进
       if (event.justCommitted) {
-        _log('已确认 ${event.committedRef}（累计 ${event.committedSequence.length} 节）');
+        final advanced = event.advancedSeconds;
+        _log('已确认 ${event.committedRef}（累计 ${event.committedSequence.length} 节'
+            '${advanced > 0 ? '，窗口前移 ${advanced.toStringAsFixed(1)}s' : ''}）');
       }
     }, onError: (Object error) => _log('识别异常 $error'));
 
