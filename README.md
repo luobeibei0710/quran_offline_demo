@@ -140,6 +140,14 @@ ONNX Runtime（原生：Android AAR / iOS onnxruntime-objc）—— 只做张量
    → 现在只在冠军是**已确认序列的延续**（同节 / 往后 1~3 节 / 下一章开头）时才推进，
    且单次最多裁掉窗口的 60%。
 
+### 与 Tilawa 原项目的对比
+
+同一批语料、同一份资产、**同一套指标代码**下与 Tilawa 官方 npm 包（`@tilawa/core`，默认配置）
+的实测对比见 [docs/tilawa-comparison.md](docs/tilawa-comparison.md)：Tilawa 在短句连读上更干净
+（`36:1-5` F1 1.000）且更快，本项目的优势在「连读多节 + 含常见短语」的语料上
+（`55:1-13` 本项目 13/13、Tilawa 锁错章 0/13）。复现脚本：`tools/tilawa_compare/` 与
+`tool/tilawa_compare_metrics.dart`。
+
 ### 自定义语料（换语料不必重新构建）
 
 需要 **16 kHz / 单声道 / 16-bit PCM 的 WAV**（引擎输入格式；mp3 请先转码）：

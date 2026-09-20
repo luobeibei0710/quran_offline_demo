@@ -79,3 +79,6 @@ assets/quran_offline/quran_ctc_tokens.json
 tools/quran_offline/.venv/
 tools/quran_offline/.venv122/
 tools/quran_offline/samples/
+
+# Tilawa 对比工程的依赖（Node）
+tools/tilawa_compare/node_modules/

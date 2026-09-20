@@ -1,0 +1,10 @@
+{
+  "name": "tilawa-compare",
+  "private": true,
+  "type": "module",
+  "description": "用 Tilawa 官方 npm 包跑同一批语料，产出可与其本项目对比的识别结果 JSON",
+  "dependencies": {
+    "@tilawa/core": "0.2.1",
+    "onnxruntime-node": "^1.22.0"
+  }
+}

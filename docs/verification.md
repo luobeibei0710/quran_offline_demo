@@ -132,3 +132,5 @@ adb logcat -d | grep -E "QuranCorpus"
 | `poc_transcribe.py` | P0 验证：单次推理 + 贪心解码 |
 | `poc_match.py` | P1 验证：文本召回 + CTC 约束精排 |
 | `reference/` | Tilawa 侧 TypeScript 参考实现（对照语义用） |
+| `../tilawa_compare/` | 用 Tilawa 官方 npm 包跑同一批语料，产出对比结果 JSON（`run_bench.mjs`） |
+| `../../tool/tilawa_compare_metrics.dart` | 用本项目 `WordAlignment` 统一计算两侧指标（覆盖率 / 准确率 / F1 / 章节命中） |
