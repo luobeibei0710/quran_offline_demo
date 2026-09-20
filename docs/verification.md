@@ -128,6 +128,7 @@ adb logcat -d | grep -E "QuranCorpus"
 | `verify_corpus.py` | 用 Tilawa 官方测试语料（文件名即答案）验证声学层准确率 |
 | `check_sample.py` | 长音频流式分段识别，输出各时间段章节（与真机结果对照） |
 | `diag_ctc.py` | 对比同一音频下不同候选 token 序列的 CTC 分数 |
+| `diag_ayah_isolated.py` | 逐节孤立诊断：把每一节单独喂模型（不含滑窗/跟踪），量出「声学 + 解码 + 文本口径」天花板；`--show-errors` 打印词级差异，软化正字法后再比一次 |
 | `tune_span_penalty.py` | 跨度惩罚标定与**门禁**：对比「正确单节」与跨度扩展在两种归一化口径下的分数、冠军选择与允许的惩罚上界；`--check` 不符即非零退出，惩罚值默认从 Dart 源码读取 |
 | `poc_transcribe.py` | P0 验证：单次推理 + 贪心解码 |
 | `poc_match.py` | P1 验证：文本召回 + CTC 约束精排 |
