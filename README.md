@@ -190,12 +190,25 @@ x_q → DequantizeLinear(x_q, x_scale, x_zp) → Conv(x_dq, w_fp32)
 | 词级进度 | `QuranWordProgress` | 对候选序列做**帧级强制对齐**（`CtcScorer.alignFrames`），把被 CTC 挤到音频内容区之后的 token 判为「尚未念到」，取前缀词数即已读词数（`estimateReadWords`，不依赖容差常数）；序列帧数不足时回退到「前缀 CTC 打分 + 容差」（`estimateReadWordsByPrefix`） |
 | 召回 + 精排 | `topK=64`、`maxSpan=4`、`spanPenalty=0.1` | 召回候选数、最大连读跨度、跨度惩罚系数（打分按帧归一化后的重标定值，见 `tools/quran_offline/tune_span_penalty.py`） |
 | 已确认进度 | `commitWordRatio=0.6` | 稳定命中且已读词达该比例时提交一节到 `committedSequence`，使长诵读进度单调推进（同一节不重复提交） |
+| 窗口推进 | `advanceWindowOnCommit=true`、`windowOverlapSeconds=1.0` | 提交已确认章节后，按帧级对齐的已读结束位置裁掉窗口前部音频（保留 1.0 s 重叠），使识别围绕当前位置进行而不是一直覆盖整段历史；事件带 `advancedSeconds` 便于观察 |
 
 ## 测试与 CI
 
 ```bash
 flutter analyze   # 静态分析
-flutter test      # 98 个用例
+flutter test      # 103 个用例
+```
+
+改动**打分口径、跨度惩罚或更换模型**后，除单测外还需跑一次真机/基准标定门禁（需要模型与官方语料，
+CI 不覆盖）：
+
+```bash
+tools/quran_offline/.venv122/bin/python tools/quran_offline/tune_span_penalty.py --check
+```
+
+它会从 Dart 源码读取当前 `defaultSpanPenalty`，校验 5 条官方样本是否都命中正确单节、惩罚是否仍在
+允许上界内（当前 0.1 < 上界 0.335），不符即非零退出。
+
 ```
 
 测试**不依赖** `assets/quran_offline/` 下的真实资产：用例通过 `FakeAssetBundle` 注入最小化的
@@ -273,9 +286,10 @@ docs/                                               验证记录、平台联调�
   现改为三层判据（音频内信噪比 + 会话级最安静本底倍数 + 0.004 极低电平兜底），并加了「收音偏弱」
   自检与比对页低覆盖率提示。判据有单测覆盖（弱语音通过 / 稳态噪声拒绝 / 静音拒绝），但**真机上的
   弱信号效果尚未验证**（需设备）。
-- **流式仍为工程化简版（已补进度推进）**：新增「已确认章节」序列（稳定命中且读满 60% 词时提交，
-  同一节不重复提交，收尾不清空、跨段累加），事件与界面都给出单调推进的进度；尚未移植 Tilawa
-  `tracker.ts` 的帧级对齐与窗口推进（识别仍在 15 s 滑窗上重复进行）。
+- **流式仍为工程化简版（已补进度推进与窗口推进）**：新增「已确认章节」序列（稳定命中且读满 60% 词
+  时提交，同一节不重复提交、收尾不清空）与**窗口推进**（提交后按帧级对齐位置裁掉已读音频、保留
+  1.0 s 重叠），识别不再一直覆盖整段历史；与 Tilawa `tracker.ts` 的剩余差距是**帧级细粒度推进**
+  —— 当前只在提交节时前移窗口，未随每个词前移。
 - **模型体积**：移动端加载 130 MB 改造版模型（124.6 MiB），debug APK 约 300 MB；
   正式交付需按需下载模型或只打单 ABI。
 - **提词器精度未定量评估**：已读词估算改为帧级强制对齐（不依赖容差常数；回退路径仍用

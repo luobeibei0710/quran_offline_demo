@@ -69,8 +69,20 @@ tools/quran_offline/.venv122/bin/pip install onnxruntime==1.22.0 numpy
 ## 推荐工作流
 
 1. 算法改动先在 Mac 用 `.venv122` 回归（`verify_corpus.py` 应保持 5/5）；
-2. 再 `flutter build apk --debug --target-platform android-arm64`（增量约 20~40 s）；
-3. `adb install -r` 后用 `adb logcat` 看内置样本自测的命中率与诊断行。
+2. 改了**打分口径、跨度惩罚或换了模型**时，再跑标定门禁（会从 Dart 源码读当前惩罚值）：
+
+   ```bash
+   tools/quran_offline/.venv122/bin/python tools/quran_offline/tune_span_penalty.py --check
+   ```
+
+   门禁校验两件事：5 条官方样本的冠军是否都等于正确单节、当前惩罚是否小于各样本算出的
+   允许上界（当前 0.1 < 0.335）；不符即退出码 1。
+3. 再 `flutter build apk --debug --target-platform android-arm64`（增量约 20~40 s）；
+4. `adb install -r` 后用 `adb logcat` 看内置样本自测的命中率与诊断行。
+
+> 门禁与语料级回归都需要**模型 + 官方语料**，两者都不入版本库（发布包也不含语料），
+> 因此它们只能作为本地/发版门禁；CI 覆盖的是与真实数值无关的部分：打分口径契约、
+> 门控与进度语义、页面渲染（见「测试与 CI」）。
 
 ## tools/quran_offline 脚本一览
 
@@ -82,7 +94,7 @@ tools/quran_offline/.venv122/bin/pip install onnxruntime==1.22.0 numpy
 | `verify_corpus.py` | 用 Tilawa 官方测试语料（文件名即答案）验证声学层准确率 |
 | `check_sample.py` | 长音频流式分段识别，输出各时间段章节（与真机结果对照） |
 | `diag_ctc.py` | 对比同一音频下不同候选 token 序列的 CTC 分数 |
-| `tune_span_penalty.py` | 跨度惩罚标定与核验：对比「正确单节」与跨度扩展在两种归一化口径下的分数与冠军选择 |
+| `tune_span_penalty.py` | 跨度惩罚标定与**门禁**：对比「正确单节」与跨度扩展在两种归一化口径下的分数、冠军选择与允许的惩罚上界；`--check` 不符即非零退出，惩罚值默认从 Dart 源码读取 |
 | `poc_transcribe.py` | P0 验证：单次推理 + 贪心解码 |
 | `poc_match.py` | P1 验证：文本召回 + CTC 约束精排 |
 | `reference/` | Tilawa 侧 TypeScript 参考实现（对照语义用） |

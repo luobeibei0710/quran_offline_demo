@@ -13,6 +13,26 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb logcat -d | grep -E "QuranDemo|QuranOrtBridge"
 ```
 
+## 验收清单（真机）
+
+```bash
+flutter build apk --debug --target-platform android-arm64
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb logcat -c && adb shell am start -n com.llvision.quran_offline_demo/.MainActivity
+adb logcat -d | grep -E "QuranDemo|QuranOrtBridge"
+```
+
+| # | 操作 | 期望 |
+|---|------|------|
+| 1 | 启动应用（不用点按） | 经文库 → 模型加载完成，自动跑内置样本自测，末尾 `内置样本验证完成：命中 5/5` |
+| 2 | 点「开始识别」后保持安静约 30 s | 不产生识别事件（VAD 门控），日志只有周期性的 `麦克风 RMS=...` |
+| 3 | 正常朗读任意一节 | 章节栏实时给出 `surah:ayah`，主区渲染对应经文，置信度/声学分/词进度随之更新 |
+| 4 | 连续朗读多节（音源贴近手机） | 日志出现 `稳定 X:Y` 与 `已确认 X:Y（累计 N 节，窗口前移 M.Ms）`，章节不回跳 |
+| 5 | 点「停止识别」 | 日志输出一行 `比对预览 …`；AppBar 比对图标可进入「左原文 / 右转写」对照页 |
+| 6 | 故意用远场小声朗读 | 采集 6 s 后日志出现「收音偏弱」提示；比对页在覆盖率 < 0.35 时显示提示条 |
+
+日志关键字：`内置样本验证完成`、`麦克风 RMS`、`已确认`、`比对预览`、`收音偏弱`、`QuranOrtBridge`。
+
 ## 系统限制（小米 HyperOS 实测）
 
 以下调试手段会被系统拒绝，不必尝试：`pm clear`、`pm grant`、`input tap`（应用无
