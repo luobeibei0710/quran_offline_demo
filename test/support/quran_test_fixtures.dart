@@ -241,6 +241,31 @@ Float32List buildSpeechLikeSamples(
   return samples;
 }
 
+/// 生成「连续朗读（无停顿）」测试音频：各帧能量均匀（±10% 抖动）。
+///
+/// 用于验证语料灌音路径：真实朗读语料（含官方语料）的帧能量峰值/中位数只有
+/// 1.3~2.0，达不到 VAD 的 [QuranStreamingConfig.speechSnrRatio]=2.5，
+/// 所以按「已知是朗读」处理时才会被放行。
+///
+/// @param seconds 时长（秒）
+/// @param level 帧幅值
+/// @param seed 抖动随机种子（保证测试可复现）
+/// @return 16 kHz 单声道 float32 采样
+Float32List buildContinuousSpeechSamples(double seconds, {double level = 0.1, int seed = 11}) {
+  const frameLength = 320; // 20 ms @ 16 kHz
+  final total = (seconds * 16000).round();
+  final samples = Float32List(total);
+  final random = math.Random(seed);
+  var amplitude = level;
+  for (var i = 0; i < total; i++) {
+    if (i % frameLength == 0) {
+      amplitude = level * (0.9 + random.nextDouble() * 0.2);
+    }
+    samples[i] = amplitude;
+  }
+  return samples;
+}
+
 /// 生成「稳态噪声」测试音频：帧能量几乎不波动（±10% 随机抖动）。
 ///
 /// 用于验证 VAD 不会把空调/风扇这类稳态底噪判成语音：峰值与中位数接近，

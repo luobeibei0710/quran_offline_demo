@@ -269,6 +269,44 @@ void main() {
       await session.dispose();
     });
 
+    test('连续朗读（无停顿）会被能量门控拒绝：信噪比判据的前提是窗口内有停顿', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+        ),
+      );
+
+      // 帧能量均匀：峰值/中位数 ≈ 1.1，远低于 speechSnrRatio=2.5
+      await session.feed(buildContinuousSpeechSamples(1.0));
+      await pumpEventQueue();
+
+      expect(events, isEmpty);
+
+      await session.dispose();
+    });
+
+    test('按「已知是朗读」建会话时，连续朗读可正常识别（语料灌音路径）', () async {
+      final (session, events, _) = await startSessionWithEvents(
+        const QuranStreamingConfig(
+          triggerSeconds: 0.05,
+          minWindowSeconds: 0.05,
+          finalSilenceSeconds: 100.0,
+          stableRounds: 1,
+          assumeSpeech: true,
+        ),
+      );
+
+      await session.feed(buildContinuousSpeechSamples(1.0));
+      await pumpEventQueue();
+
+      expect(events, isNotEmpty);
+      expect(events.last.champion?.ref, '1:1');
+
+      await session.dispose();
+    });
+
     test('稳态噪声不触发（放宽下限后仍不误触发）', () async {
       final (session, events, runner) = await startSessionWithEvents(
         const QuranStreamingConfig(

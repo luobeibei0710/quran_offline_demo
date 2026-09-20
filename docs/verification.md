@@ -84,6 +84,31 @@ tools/quran_offline/.venv122/bin/pip install onnxruntime==1.22.0 numpy
 > 因此它们只能作为本地/发版门禁；CI 覆盖的是与真实数值无关的部分：打分口径契约、
 > 门控与进度语义、页面渲染（见「测试与 CI」）。
 
+## 准确度验证（语料灌音，不经麦克风）
+
+设备上的准确度验证走应用内的「语料验证」页（主界面右上角图标）：选中语料后音频直接灌入引擎，
+与抓音质量无关。也可无人值守跑一遍：
+
+```bash
+flutter build apk --debug --target-platform android-arm64 --dart-define=quran_auto_corpus=true
+adb install -r --no-streaming build/app/outputs/flutter-apk/app-debug.apk
+adb logcat -c && adb shell am start -n com.llvision.quran_offline_demo/.MainActivity
+adb logcat -d | grep -E "QuranCorpus"
+```
+
+实测（2026-09-20，Redmi 24117RK2CC / Android 16 / arm64）：**命中 4/5**；`36:1` F1 1.000、
+`112:1` F1 0.727、`1:2` F1 0.615；`2:255`（50 词长节）未命中 —— 长节被 15 s 滑窗切碎后，
+片段文本召回到别的节，Tilawa 的片段/前缀匹配（`JOINT_FRAGMENT_BLEND`、`JOINT_PREFIX_*`）尚未移植。
+
+两个与数据/门控有关的坑（已修）：
+
+1. **能量门控会挡掉连续朗读**：语料帧能量的峰值/中位数只有 1.3~2.0，低于 `speechSnrRatio=2.5`
+   （症状：灌音 0 事件、转写 0 词、F1 全 0）→ 灌音会话按「已知是朗读」建（`assumeSpeech: true`），
+   实时采集路径仍用完整门控；
+2. **经文库原文含太斯米**：`36:1` 的原文是「太斯米 + يس」共 5 词，而官方音频只有 يس
+   → 提供「去掉太斯米前缀」的原文变体，比对时取更贴合音频的那个并在页面上标明
+   （`36:1` F1 由 0.333 升到 1.000）。
+
 ## tools/quran_offline 脚本一览
 
 | 脚本 | 用途 |

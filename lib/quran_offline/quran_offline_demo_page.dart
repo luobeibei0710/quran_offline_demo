@@ -17,6 +17,7 @@ import 'ctc_scorer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import 'corpus_verify_page.dart';
 import 'ort_runner.dart';
 import 'quran_assets.dart';
 import 'quran_compare_page.dart';
@@ -276,6 +277,27 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     );
   }
 
+  /// 打开语料验证页：选中语料后把音频灌入引擎（不经麦克风），跑完与语料原文比对。
+  ///
+  /// 与实时识别共用同一个识别器（同一份模型），因此不可在采集时进入；
+  /// 页面对会话、转写稿各自的累积互不干扰。
+  ///
+  /// @param autoRunAll 进入后是否自动跑一遍全部语料（无人值守验证用）
+  Future<void> _openCorpusVerify({bool autoRunAll = false}) async {
+    final assets = _assets;
+    final recognizer = _recognizer;
+    if (assets == null || recognizer == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CorpusVerifyPage(
+          assets: assets,
+          recognizer: recognizer,
+          autoRunAll: autoRunAll,
+        ),
+      ),
+    );
+  }
+
   /// 结束识别后先算一遍比对指标并写入日志，不打开页面也能看到结果概览。
   Future<void> _logComparisonPreview() async {
     final words = _stitcher.words;
@@ -305,6 +327,12 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
   ///
   /// 打开方式：`--dart-define=quran_auto_stop_seconds=160`
   static const int _autoStopSeconds = int.fromEnvironment('quran_auto_stop_seconds');
+
+  /// 联调开关：加载完成后自动进入「语料验证」并跑一遍全部语料（含与原文比对）。
+  ///
+  /// 该链路不依赖麦克风与声学环境，适合设备上无人值守跑准确度回归：
+  /// `--dart-define=quran_auto_corpus=true`
+  static const bool _autoCorpus = bool.fromEnvironment('quran_auto_corpus');
 
   /// 提词器开关：true 时主区显示「逐词跟随高亮」提词器；
   /// false 时显示 Streaming 样式（整句奥斯曼体经文）。
@@ -409,6 +437,13 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       }
     }
     _log('内置样本验证完成：命中 $hits/${_builtinSamples.length}');
+    if (_autoCorpus) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      _log('联调模式：自动进入语料验证（灌音 + 原文比对）');
+      await _openCorpusVerify(autoRunAll: true);
+      return;
+    }
+
     if (_autoStartListening) {
       await Future<void>.delayed(const Duration(seconds: 2));
       _log('联调模式：自动开始麦克风识别');
@@ -450,6 +485,14 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       appBar: AppBar(
         title: const Text('古兰经离线识别 Demo'),
         actions: [
+          // 语料验证入口：音频灌入引擎（不经麦克风）+ 与语料原文比对
+          IconButton(
+            tooltip: '语料验证（灌音 + 原文比对）',
+            onPressed: _assets == null || _recognizer == null || _phase == _Phase.recording
+                ? null
+                : _openCorpusVerify,
+            icon: const Icon(Icons.library_music_outlined),
+          ),
           // 比对入口：有转写内容后可用，进入「左侧原文 / 右侧转写」比对页
           IconButton(
             tooltip: '比对结果（左：原文，右：转写）',

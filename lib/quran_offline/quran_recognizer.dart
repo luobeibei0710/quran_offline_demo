@@ -93,6 +93,7 @@ class QuranStreamingConfig {
     this.commitWordRatio = 0.6,
     this.advanceWindowOnCommit = true,
     this.windowOverlapSeconds = 1.0,
+    this.assumeSpeech = false,
     this.topK = QuranMatcher.defaultTopK,
     this.maxSpan = QuranMatcher.defaultMaxSpan,
     this.spanPenalty = QuranMatcher.defaultSpanPenalty,
@@ -141,6 +142,13 @@ class QuranStreamingConfig {
   /// 稳定命中且已读词达到该比例时把该节计入 [QuranRecognitionEvent.committedSequence]，
   /// 使长诵读的进度单调推进（不再随窗口重识别来回跳）。
   final double commitWordRatio;
+
+  /// 已知输入必为朗读时，跳过多层能量判据（只保留极低电平兜底）。
+  ///
+  /// 语料灌音用：官方/自定义语料是**连续朗读**，帧能量均匀（实测峰值/中位数仅
+  /// 1.3~2.0），达不到 [speechSnrRatio] 要求的 2.5 倍，会被整段挡掉而识别不出任何内容。
+  /// 实时采集路径保持 `false`（那里的判据是用来挡空调声/风扇声的）。
+  final bool assumeSpeech;
 
   /// 提交已确认章节后，是否把窗口前部已读的音频裁掉（让识别随进度前移）。
   ///
@@ -216,14 +224,28 @@ class QuranRecognizer {
   }
 
   /// 创建一个流式识别会话。
-  QuranStreamingSession createSession() => QuranStreamingSession(this);
+  /// 新建流式会话。
+  ///
+  /// @param assumeSpeech 按「已知是朗读」处理（语料灌音用，见
+  ///   [QuranStreamingConfig.assumeSpeech]）
+  /// @return 新的会话实例
+  QuranStreamingSession createSession({bool assumeSpeech = false}) =>
+      QuranStreamingSession(this, assumeSpeech: assumeSpeech);
 }
 
 /// 流式识别会话：持续喂入音频分块，异步产出识别事件。
 class QuranStreamingSession {
-  QuranStreamingSession(this._recognizer);
+  /// 构造会话。
+  ///
+  /// @param recognizer 识别器
+  /// @param assumeSpeech 强制按「已知是朗读」处理（覆盖配置里的同名开关）
+  QuranStreamingSession(this._recognizer, {bool assumeSpeech = false})
+      : _assumeSpeech = assumeSpeech || _recognizer.config.assumeSpeech;
 
   final QuranRecognizer _recognizer;
+
+  /// 是否跳过多层能量判据（见 [QuranStreamingConfig.assumeSpeech]）。
+  final bool _assumeSpeech;
 
   final StreamController<QuranRecognitionEvent> _controller =
       StreamController<QuranRecognitionEvent>.broadcast();
@@ -465,6 +487,11 @@ class QuranStreamingSession {
   /// @param samples 累积音频
   /// @return 判定存在语音时返回 true
   bool _hasSpeech(Float32List samples) {
+    final config = _recognizer.config;
+    if (_assumeSpeech) {
+      // 已知是朗读（语料灌音）：只保留极低电平兜底，避免纯静音窗口产出臆测结果
+      return _rms(samples) >= config.speechRmsThreshold;
+    }
     const speechWindowSeconds = 2.0;
     final frameLength = (0.02 * QuranRecognizer.sampleRate).round();
     final windowSamples = (speechWindowSeconds * QuranRecognizer.sampleRate).round();
@@ -494,7 +521,6 @@ class QuranStreamingSession {
     // 1. 音频内信噪比：峰值 ≥ 最近 2 s 本底 × snrRatio；
     // 2. 会话级本底倍数：峰值 ≥ 会话最安静本底 × quietFloorRatio；
     // 3. 极低电平兜底：排除纯数值噪声。
-    final config = _recognizer.config;
     final required = math.max(
       math.max(median * config.speechSnrRatio, _quietBaseline * config.speechQuietFloorRatio),
       config.speechRmsThreshold,
