@@ -140,6 +140,12 @@ ONNX Runtime（原生：Android AAR / iOS onnxruntime-objc）—— 只做张量
    → 现在只在冠军是**已确认序列的延续**（同节 / 往后 1~3 节 / 下一章开头）时才推进，
    且单次最多裁掉窗口的 60%。
 
+### 一次失败的尝试（已回滚，留档）
+
+为压掉「多余词」而试过**片段候选 + 内容帧短缺惩罚 + 信任门控 + 序列先验**四处改动，
+真机跑批显示**净负收益**（`55:1-13` 覆盖率 0.926→0.649）并已全部回滚；
+数据、原因与「下一步该怎么做」见 [docs/fragment-matching-experiment.md](docs/fragment-matching-experiment.md)。
+
 ### 与 Tilawa 原项目的对比
 
 同一批语料、同一份资产、**同一套指标代码**下与 Tilawa 官方 npm 包（`@tilawa/core`，默认配置）

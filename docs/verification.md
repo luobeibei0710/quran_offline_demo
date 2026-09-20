@@ -118,6 +118,11 @@ adb logcat -d | grep -E "QuranCorpus"
 3. **逐词 ASR 输出不能当长音频转写**（47 词语料拼出 150 词、126 词拼出 1258 词）→ 转写稿改取
    「稳定命中章节的标准经文、按新覆盖到的节累加」，逐词输出仅作诊断。
 
+## 相关记录
+
+- 与 Tilawa 原项目的受控对比、误差预算（为什么上不了 0.95）：[tilawa-comparison.md](tilawa-comparison.md)
+- 一次失败尝试（片段候选/短缺惩罚/信任门控/序列先验）的数据与原因：[fragment-matching-experiment.md](fragment-matching-experiment.md)
+
 ## tools/quran_offline 脚本一览
 
 | 脚本 | 用途 |
