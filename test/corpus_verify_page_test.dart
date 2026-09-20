@@ -39,7 +39,7 @@ void main() {
             id: 'test',
             title: '测试语料 1:1',
             audio: CorpusAudioSource.asset('assets/test.wav'),
-            reference: CorpusReference.verse('1:1'),
+            reference: CorpusReference.range(surah: 1, ayahStart: 1, ayahEnd: 1),
           ),
         ],
         audioLoader: (_) async => buildTestWav(buildSpeechLikeSamples(0.2)),
@@ -57,7 +57,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('测试语料 1:1'), findsOneWidget);
+    expect(find.textContaining('测试语料 1:1'), findsOneWidget);
     expect(find.textContaining('测试原文'), findsOneWidget);
     expect(find.textContaining('不使用麦克风'), findsOneWidget);
   });
@@ -67,7 +67,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(find.text('测试语料 1:1'));
+    await tester.tap(find.textContaining('测试语料 1:1'));
     // 灌音 0.2s（5ms 分块 → 40 块）+ 对齐 + 导航
     for (var i = 0; i < 120; i++) {
       await tester.pump(const Duration(milliseconds: 10));
@@ -94,7 +94,7 @@ void main() {
               id: 'bad',
               title: '坏音频',
               audio: CorpusAudioSource.asset('assets/bad.wav'),
-              reference: CorpusReference.verse('1:1'),
+              reference: CorpusReference.range(surah: 1, ayahStart: 1, ayahEnd: 1),
             ),
           ],
           audioLoader: (_) async => buildTestWav(Float32List(64), sampleRate: 44100),
@@ -109,7 +109,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('坏音频'), findsOneWidget);
+    expect(find.textContaining('坏音频'), findsWidgets);
     expect(find.byIcon(Icons.error_outline), findsOneWidget);
   });
 }

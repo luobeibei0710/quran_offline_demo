@@ -269,6 +269,26 @@ void main() {
       await session.dispose();
     });
 
+    test('窗口推进的延续判定：同节/往后几节/下一章开头算延续，跳别处不算', () {
+      // 没有参照时保持宽松
+      expect(QuranStreamingSession.isContinuation(null, '1:1'), isTrue);
+      expect(QuranStreamingSession.isContinuation('1:1', null), isTrue);
+      // 同章往后
+      expect(QuranStreamingSession.isContinuation('36:5', '36:6'), isTrue);
+      expect(QuranStreamingSession.isContinuation('36:5', '36:8'), isTrue);
+      expect(QuranStreamingSession.isContinuation('1:1-2', '1:3'), isTrue);
+      // 跨章只看下一章开头
+      expect(QuranStreamingSession.isContinuation('36:5', '37:1'), isTrue);
+      expect(QuranStreamingSession.isContinuation('36:5', '37:4'), isFalse);
+      // 片段误匹配导致的跳章：不允许据此裁剪窗口
+      expect(QuranStreamingSession.isContinuation('36:5', '87:2'), isFalse);
+      expect(QuranStreamingSession.isContinuation('55:3', '2:1'), isFalse);
+      // 回退（往前）不算延续
+      expect(QuranStreamingSession.isContinuation('36:5', '36:4'), isFalse);
+      // 无法解析时保持宽松
+      expect(QuranStreamingSession.isContinuation('坏引用', '36:6'), isTrue);
+    });
+
     test('连续朗读（无停顿）会被能量门控拒绝：信噪比判据的前提是窗口内有停顿', () async {
       final (session, events, _) = await startSessionWithEvents(
         const QuranStreamingConfig(

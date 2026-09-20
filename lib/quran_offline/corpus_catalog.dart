@@ -1,13 +1,21 @@
 /// 语料清单：可供「语料验证」选中的音频 + 它的原文（参考答案）。
 ///
-/// 两类来源：
-/// 1. **官方语料**：Tilawa v0.2.0 的测试语料（文件名即答案），随包内置，
-///    原文取经文库里的标准经文（不是识别结果，可作为独立参考答案）；
-/// 2. **自定义语料**：`adb push` 到应用私有目录的 WAV + 该段朗读的原文 txt，
-///    换语料不必重新构建（原文路径复用 [ReferenceText] 的设备覆盖机制）。
+/// 两类来源，走同一套「区间 → 原文」规则：
+/// 1. **内置语料**：`assets/quran_offline/corpus/` 下的多节连续诵读，清单由
+///    `manifest.json` 描述（由 `tools/quran_offline/download_corpus.sh` 生成，
+///    音频与模型一样不入版本库）；
+/// 2. **设备语料**：`adb push` 到应用私有目录 `files/corpus/` 的 WAV，
+///    可有同名 `.txt` 指定原文；没有 txt 时按文件名 `corpus_SSS_AAA_BBB.wav`
+///    解析出章节区间，原文取经文库标准经文。
+///
+/// 为什么用「章节区间」而不是单节：语料本身是多节连续诵读，参考原文应当是这几节
+/// 标准经文的拼接，命中判定也应该按「区间里的节是否都识别到」来算。
 library;
 
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
 import 'reference_text.dart';
 
@@ -35,31 +43,56 @@ class CorpusAudioSource {
 
 /// 语料原文来源。
 class CorpusReference {
-  /// 章节（官方语料：原文取该节的标准经文）。
+  /// 章节区间（原文取经文库标准经文；单节即 start == end）。
   ///
-  /// @param ref `surah:ayah`
-  const CorpusReference.verse(this.ref) : textPaths = const <String>[];
+  /// @param surah 章号
+  /// @param ayahStart 起始节
+  /// @param ayahEnd 结束节（含）
+  const CorpusReference.range({
+    required this.surah,
+    required this.ayahStart,
+    required this.ayahEnd,
+  }) : textPaths = const <String>[];
 
-  /// 设备文本文件（自定义语料）。
+  /// 设备文本文件（自定义语料：原文由用户提供）。
   ///
   /// @param textPaths 候选路径
-  const CorpusReference.textFile(this.textPaths) : ref = null;
+  const CorpusReference.textFile(this.textPaths)
+      : surah = null,
+        ayahStart = 0,
+        ayahEnd = 0;
 
-  /// 期望章节（自定义语料时为 null）。
-  final String? ref;
+  /// 章号（自定义文本来源时为 null）。
+  final int? surah;
 
-  /// 原文文本候选路径（官方语料时为空）。
+  /// 起始节。
+  final int ayahStart;
+
+  /// 结束节（含）。
+  final int ayahEnd;
+
+  /// 原文文本候选路径（区间来源时为空）。
   final List<String> textPaths;
 
-  /// 是否有「标准答案章节」可用于命中判定。
-  bool get hasExpectedRef => ref != null;
+  /// 是否按经文库区间取原文。
+  bool get isRange => surah != null;
+
+  /// 区间内的节引用（有序）；自定义文本来源时为空。
+  List<String> get expectedRefs => isRange
+      ? <String>[for (var ayah = ayahStart; ayah <= ayahEnd; ayah++) '$surah:$ayah']
+      : const <String>[];
+
+  /// 区间展示名（自定义文本来源时为「自定义原文」）。
+  String get label => isRange
+      ? (ayahStart == ayahEnd ? '$surah:$ayahStart' : '$surah:$ayahStart-$ayahEnd')
+      : '自定义原文';
 }
 
 /// 一条语料。
 class CorpusItem {
   /// 构造语料条目。
   ///
-  /// @param id 唯一标识（用于界面状态与结果记录）
+  /// @param id 唯一标识（界面状态与结果记录用）
   /// @param title 展示名
   /// @param audio 音频来源
   /// @param reference 原文来源
@@ -81,48 +114,139 @@ class CorpusItem {
 
   /// 原文来源。
   final CorpusReference reference;
+
+  /// 期望章节（区间来源时非空，用于命中判定）。
+  List<String> get expectedRefs => reference.expectedRefs;
 }
 
 /// 语料清单。
 class CorpusCatalog {
-  /// 官方语料：资产路径 → 期望章节（文件名 SSSAAA 即章号与节号）。
-  static const List<({String assetKey, String ref})> officialSamples =
-      <({String assetKey, String ref})>[
-    (assetKey: 'assets/quran_offline/sample_001001.wav', ref: '1:1'),
-    (assetKey: 'assets/quran_offline/sample_001002.wav', ref: '1:2'),
-    (assetKey: 'assets/quran_offline/sample_002255.wav', ref: '2:255'),
-    (assetKey: 'assets/quran_offline/sample_036001.wav', ref: '36:1'),
-    (assetKey: 'assets/quran_offline/sample_112001.wav', ref: '112:1'),
+  /// 内置语料目录。
+  static const String assetDir = 'assets/quran_offline/corpus/';
+
+  /// 内置语料清单文件。
+  static const String manifestAsset = '${assetDir}manifest.json';
+
+  /// 设备语料目录候选（应用私有目录与外置私有目录）。
+  static const List<String> deviceDirs = <String>[
+    '/data/data/com.llvision.quran_offline_demo/files/corpus',
+    '/storage/emulated/0/Android/data/com.llvision.quran_offline_demo/files/corpus',
   ];
 
-  /// 自定义语料的音频候选路径（Android 私有目录与外部私有目录）。
+  /// 文件名解析正则：`corpus_SSS_AAA_BBB.wav`。
+  static final RegExp _fileNamePattern =
+      RegExp(r'^corpus_(\d{3})_(\d{3})_(\d{3})\.wav$', caseSensitive: false);
+
+  /// 加载清单：内置语料 + 设备语料。
   ///
-  /// 推送方式（debug 包）：
-  /// ```bash
-  /// adb push corpus_audio.wav /data/local/tmp/corpus_audio.wav
-  /// adb shell run-as com.llvision.quran_offline_demo \
-  ///   cp /data/local/tmp/corpus_audio.wav files/corpus_audio.wav
-  /// ```
-  static const List<String> customAudioPaths = <String>[
-    '/data/data/com.llvision.quran_offline_demo/files/corpus_audio.wav',
-    '/storage/emulated/0/Android/data/com.llvision.quran_offline_demo/files/corpus_audio.wav',
-  ];
+  /// @param bundle 资产来源，默认 [rootBundle]
+  /// @param listDir 目录列举实现，默认用 dart:io（测试可注入）
+  /// @param readText 文本读取实现（读取设备语料的同名 .txt）
+  /// @return 语料条目列表（内置在前）
+  static Future<List<CorpusItem>> load({
+    AssetBundle? bundle,
+    Future<List<String>> Function(String dir)? listDir,
+    Future<String?> Function(String path)? readText,
+  }) async {
+    final assets = bundle ?? rootBundle;
+    final items = <CorpusItem>[];
+    items.addAll(await _loadBuiltin(assets));
+    items.addAll(await _loadDevice(listDir ?? _listFiles, readText ?? _readText));
+    return items;
+  }
 
-  /// 自定义语料的条目 id。
-  static const String customId = 'custom';
+  /// 载入内置语料（读 `manifest.json`；缺失或格式不符时返回空列表）。
+  static Future<List<CorpusItem>> _loadBuiltin(AssetBundle bundle) async {
+    try {
+      final content = await bundle.loadString(manifestAsset);
+      final decoded = jsonDecode(content);
+      if (decoded is! List) return const <CorpusItem>[];
+      final items = <CorpusItem>[];
+      for (final entry in decoded) {
+        if (entry is! Map) continue;
+        final file = entry['file'];
+        final surah = entry['surah'];
+        final start = entry['ayahStart'];
+        final end = entry['ayahEnd'];
+        if (file is! String || surah is! int || start is! int || end is! int) continue;
+        items.add(
+          CorpusItem(
+            id: file,
+            title: '内置语料 · '
+                '${CorpusReference.range(surah: surah, ayahStart: start, ayahEnd: end).label}',
+            audio: CorpusAudioSource.asset('$assetDir$file'),
+            reference: CorpusReference.range(surah: surah, ayahStart: start, ayahEnd: end),
+          ),
+        );
+      }
+      return items;
+    } catch (_) {
+      // 清单不存在或不是合法 JSON：视为没有内置语料，不影响设备语料
+      return const <CorpusItem>[];
+    }
+  }
+
+  /// 载入设备语料：`files/corpus/*.wav`，同名 `.txt` 作为原文。
+  static Future<List<CorpusItem>> _loadDevice(
+    Future<List<String>> Function(String dir) listDir,
+    Future<String?> Function(String path) readText,
+  ) async {
+    final items = <CorpusItem>[];
+    for (final dir in deviceDirs) {
+      final files = await listDir(dir);
+      final wavs = files.where((path) => path.toLowerCase().endsWith('.wav')).toList()..sort();
+      for (final wav in wavs) {
+        final name = _baseName(wav);
+        final textPath = '${wav.substring(0, wav.length - 4)}.txt';
+        final text = await readText(textPath);
+        final range = parseRangeFromFileName(name);
+        final reference = text != null && text.trim().isNotEmpty
+            ? CorpusReference.textFile(<String>[textPath])
+            : (range == null
+                ? null
+                : CorpusReference.range(
+                    surah: range.$1,
+                    ayahStart: range.$2,
+                    ayahEnd: range.$3,
+                  ));
+        if (reference == null) continue; // 既没有原文也没有可解析的区间：跳过
+        items.add(
+          CorpusItem(
+            id: wav,
+            title: '设备语料 · ${name.replaceAll('.wav', '')}',
+            audio: CorpusAudioSource.deviceFile(<String>[wav]),
+            reference: reference,
+          ),
+        );
+      }
+    }
+    return items;
+  }
+
+  /// 从文件名解析章节区间（`corpus_036_001_005.wav`）。
+  ///
+  /// @param fileName 文件名
+  /// @return `(章号, 起始节, 结束节)`；不符合命名规则时返回 null
+  static (int, int, int)? parseRangeFromFileName(String fileName) {
+    final match = _fileNamePattern.firstMatch(fileName);
+    if (match == null) return null;
+    return (
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+    );
+  }
 
   /// 太斯米（归一化后的词形，与经文库 `text_clean` 一致）。
   static const List<String> bismillahWords = <String>['بسم', 'الله', 'الرحمن', 'الرحيم'];
 
-  /// 官方语料原文的候选变体：完整经文 + 去掉太斯米前缀的版本。
+  /// 语料原文的候选变体：完整原文 + 去掉太斯米前缀的版本。
   ///
-  /// 经文库把太斯米并入部分章节的原文（如 `36:1` = 「太斯米 + يس」共 5 词、
-  /// `112:1` = 「太斯米 + قل هو الله احد」共 8 词），但**官方语料的部分音频并不含
-  /// 太斯米**（`36:1` 音频 4.6 s 里只有 يس）。若只按完整经文比对，会凭空多出 4 个
-  /// 「缺失词」，F1 结构性偏低；因此这里给出两个变体，比对时取更贴合音频的那个，
-  /// 并在比对页的来源上标明用的是哪一个。
+  /// 经文库把太斯米并入部分章节的原文（`1:1`、`36:1`、`112:1` 等），而语料音频
+  /// 不一定包含太斯米。若只按完整原文比对，会凭空多出 4 个「缺失词」把 F1 压下去；
+  /// 因此给出两个变体，比对时取更贴合音频的那个，并在比对页来源上标明。
   ///
-  /// @param full 经文库的完整原文
+  /// @param full 完整原文
   /// @return 候选原文列表（至少一条；无太斯米前缀时只有一条）
   static List<ReferenceText> referenceVariants(ReferenceText full) {
     final words = full.words;
@@ -148,46 +272,35 @@ class CorpusCatalog {
     ];
   }
 
-  /// 构建清单：官方语料始终在列；检测到自定义音频时追加一条。
-  ///
-  /// @param fileExists 设备文件存在性判断，默认用 dart:io（测试可注入）
-  /// @return 语料条目列表
-  static Future<List<CorpusItem>> load({
-    Future<bool> Function(String path)? fileExists,
-  }) async {
-    final exists = fileExists ?? _fileExists;
-    final items = <CorpusItem>[
-      for (final sample in officialSamples)
-        CorpusItem(
-          id: sample.assetKey,
-          title: '官方语料 · ${sample.ref}',
-          audio: CorpusAudioSource.asset(sample.assetKey),
-          reference: CorpusReference.verse(sample.ref),
-        ),
-    ];
-
-    for (final path in customAudioPaths) {
-      if (await exists(path)) {
-        items.add(
-          CorpusItem(
-            id: customId,
-            title: '自定义语料（设备文件）',
-            audio: CorpusAudioSource.deviceFile(customAudioPaths),
-            reference: CorpusReference.textFile(ReferenceText.overridePaths),
-          ),
-        );
-        break;
-      }
-    }
-    return items;
+  /// 取文件名。
+  static String _baseName(String path) {
+    final index = path.lastIndexOf('/');
+    return index < 0 ? path : path.substring(index + 1);
   }
 
-  /// 默认的文件存在性判断。
-  static Future<bool> _fileExists(String path) async {
+  /// 默认目录列举实现。
+  static Future<List<String>> _listFiles(String dir) async {
     try {
-      return await File(path).exists();
+      final directory = Directory(dir);
+      if (!await directory.exists()) return const <String>[];
+      return directory
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.path)
+          .toList(growable: false);
     } catch (_) {
-      return false;
+      return const <String>[];
+    }
+  }
+
+  /// 默认文本读取实现。
+  static Future<String?> _readText(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      return await file.readAsString();
+    } catch (_) {
+      return null;
     }
   }
 }

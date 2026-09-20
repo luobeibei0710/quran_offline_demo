@@ -62,6 +62,8 @@ flutter:
   # 古兰经离线识别资产：声学模型（原版 88 MB + 改造版 130 MB）、词表与经文库（约 15 MB），不入版本库
   assets:
     - assets/quran_offline/
+    # 语料验证用的多节连续诵读（由 download_corpus.sh 生成，不入版本库）
+    - assets/quran_offline/corpus/
     # 比对用原文（参考答案，约 3 KB，纳入版本库）
     - assets/quran_reference/
 

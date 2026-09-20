@@ -90,24 +90,33 @@ tools/quran_offline/.venv122/bin/pip install onnxruntime==1.22.0 numpy
 与抓音质量无关。也可无人值守跑一遍：
 
 ```bash
+bash tools/quran_offline/download_corpus.sh                    # 取内置多节语料（不入版本库）
 flutter build apk --debug --target-platform android-arm64 --dart-define=quran_auto_corpus=true
 adb install -r --no-streaming build/app/outputs/flutter-apk/app-debug.apk
 adb logcat -c && adb shell am start -n com.llvision.quran_offline_demo/.MainActivity
 adb logcat -d | grep -E "QuranCorpus"
 ```
 
-实测（2026-09-20，Redmi 24117RK2CC / Android 16 / arm64）：**命中 4/5**；`36:1` F1 1.000、
-`112:1` F1 0.727、`1:2` F1 0.615；`2:255`（50 词长节）未命中 —— 长节被 15 s 滑窗切碎后，
-片段文本召回到别的节，Tilawa 的片段/前缀匹配（`JOINT_FRAGMENT_BLEND`、`JOINT_PREFIX_*`）尚未移植。
+实测（2026-09-20，Redmi 24117RK2CC / Android 16 / arm64）：
 
-两个与数据/门控有关的坑（已修）：
+| 语料 | 原文 | 转写稿 | 一致词 | 覆盖率 | F1 | 结论 |
+|------|------|--------|--------|--------|-----|------|
+| `36:1-5`（28 s） | 16 词 | 27 词 | 16 | **1.000** | 0.744 | 一般 |
+| `55:1-13`（87 s） | 47 词 | 54 词 | 43 | 0.926 | **0.861** | 良好 |
+| `67:1-11`（159 s） | 126 词 | 209 词 | 126 | **1.000** | 0.752 | 良好 |
 
-1. **能量门控会挡掉连续朗读**：语料帧能量的峰值/中位数只有 1.3~2.0，低于 `speechSnrRatio=2.5`
-   （症状：灌音 0 事件、转写 0 词、F1 全 0）→ 灌音会话按「已知是朗读」建（`assumeSpeech: true`），
-   实时采集路径仍用完整门控；
-2. **经文库原文含太斯米**：`36:1` 的原文是「太斯米 + يس」共 5 词，而官方音频只有 يس
-   → 提供「去掉太斯米前缀」的原文变体，比对时取更贴合音频的那个并在页面上标明
-   （`36:1` F1 由 0.333 升到 1.000）。
+汇总：**章节命中 25/29 节，整段全中 2/3 条**。残留误差来自「短句误匹配」（引擎在短窗口上会把
+`2:1`「الم」、`1:3`「الرحمن الرحيم」这类短句稳定地误认出来 → 多余词拉低 F1），
+根因是片段/前缀匹配未实现（Tilawa 的 `JOINT_FRAGMENT_BLEND`、`JOINT_PREFIX_*`）。
+
+三条与口径/门控有关的坑（均已修，见 README「语料验证」与「已知限制」）：
+
+1. **能量门控挡掉连续朗读**：语料帧能量的峰值/中位数只有 1.3~2.0 < `speechSnrRatio=2.5`
+   （症状：灌音 0 事件、F1 全 0）→ 灌音会话按「已知是朗读」建（`assumeSpeech: true`）；
+2. **窗口推进在错误匹配下裁掉真内容**（159 s 语料被前移 155 s）→ 只在冠军是「已确认序列的延续」
+   时才推进，且单次最多裁 60%；
+3. **逐词 ASR 输出不能当长音频转写**（47 词语料拼出 150 词、126 词拼出 1258 词）→ 转写稿改取
+   「稳定命中章节的标准经文、按新覆盖到的节累加」，逐词输出仅作诊断。
 
 ## tools/quran_offline 脚本一览
 

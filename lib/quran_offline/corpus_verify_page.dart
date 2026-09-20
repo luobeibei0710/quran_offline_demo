@@ -26,7 +26,13 @@ import 'word_alignment.dart';
 
 /// 一条语料的加载结果。
 class _CorpusEntry {
-  _CorpusEntry({required this.item, this.samples, this.references, this.error});
+  _CorpusEntry({
+    required this.item,
+    this.samples,
+    this.references,
+    this.error,
+    this.surahName = '',
+  });
 
   /// 语料定义。
   final CorpusItem item;
@@ -39,6 +45,9 @@ class _CorpusEntry {
 
   /// 加载/解析失败原因。
   final String? error;
+
+  /// 章名（区间来源时用于展示）。
+  final String surahName;
 
   /// 主原文。
   ReferenceText? get reference =>
@@ -166,6 +175,12 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
         item: item,
         samples: samples,
         references: CorpusCatalog.referenceVariants(reference),
+        surahName: item.reference.isRange
+            ? (widget.assets
+                    .verse(item.reference.surah!, item.reference.ayahStart)
+                    ?.surahName ??
+                '')
+            : '',
       );
     } catch (error) {
       return _CorpusEntry(item: item, error: '$error');
@@ -188,19 +203,24 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     throw StateError('设备上找不到音频：${source.filePaths.join(' 或 ')}');
   }
 
-  /// 解析原文：官方语料取经文库标准经文；自定义语料用设备文件覆盖（回退内置资产）。
+  /// 解析原文：区间取经文库标准经文拼接；自定义语料用同名 txt（回退内置资产）。
   Future<ReferenceText> _loadReference(CorpusReference reference) async {
     final injected = widget.referenceLoader;
     if (injected != null) return injected(reference);
-    final ref = reference.ref;
-    if (ref != null) {
-      final parts = ref.split(':');
-      final verse = widget.assets.verse(int.parse(parts[0]), int.parse(parts[1]));
-      if (verse == null) throw StateError('经文库缺少 $ref');
+    if (reference.isRange) {
+      final surah = reference.surah!;
+      final words = <String>[];
+      final uthmani = <String>[];
+      for (var ayah = reference.ayahStart; ayah <= reference.ayahEnd; ayah++) {
+        final verse = widget.assets.verse(surah, ayah);
+        if (verse == null) throw StateError('经文库缺少 $surah:$ayah');
+        words.addAll(verse.words);
+        uthmani.add(verse.textUthmani);
+      }
       return ReferenceText(
-        words: verse.words,
-        rawText: verse.textUthmani,
-        source: '经文库标准经文 · $ref',
+        words: words,
+        rawText: uthmani.join(' '),
+        source: '经文库标准经文 · ${reference.label}',
       );
     }
     return ReferenceText.load();
@@ -212,18 +232,21 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     final usable = _entries.where((entry) => entry.usable).toList();
     if (usable.isEmpty) return;
     _log('开始批量灌音：共 ${usable.length} 条');
-    var hits = 0;
+    var fullHit = 0;
     var judged = 0;
+    var matchedAyahs = 0;
+    var totalAyahs = 0;
     for (final entry in usable) {
       if (!mounted) return;
       await _run(entry, openCompare: false);
-      final hit = _outcomes[entry.item.id]?.result.hit;
-      if (hit != null) {
-        judged++;
-        if (hit) hits++;
-      }
+      final result = _outcomes[entry.item.id]?.result;
+      if (result == null || result.expectedRefs.isEmpty) continue;
+      judged++;
+      matchedAyahs += result.matchedRefs.length;
+      totalAyahs += result.expectedRefs.length;
+      if (result.hit == true) fullHit++;
     }
-    _log('语料验证完成：命中 $hits/$judged（有标准答案的语料）');
+    _log('语料验证完成：章节命中 $matchedAyahs/$totalAyahs 节；整段全中 $fullHit/$judged 条');
   }
 
   /// 灌音一条语料，跑完与原文比对，并按需进入比对页。
@@ -245,7 +268,7 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     final runner = CorpusRunner(
       recognizer: widget.recognizer,
       samples: samples,
-      expectedRef: entry.item.reference.ref,
+      expectedRefs: entry.item.expectedRefs,
       chunkMs: widget.chunkMs,
     );
     CorpusRunResult result;
@@ -279,10 +302,12 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
       _log('原文采用变体：${chosen.source}');
     }
 
-    _log('转写拼接 ${result.transcriptWords.length} 词，事件 ${result.eventCount} 次，'
+    _log('转写稿 ${result.transcriptWords.length} 词（稳定命中 ${result.transcriptRefs.length} 节）· '
+        '逐词原始输出 ${result.rawTranscriptWords.length} 词 · 事件 ${result.eventCount} 次 · '
         '耗时 ${(result.elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s'
-        '${result.advancedSeconds > 0 ? '，窗口前移 ${result.advancedSeconds.toStringAsFixed(1)}s' : ''}');
-    _log('识别章节：${result.seenRefs.isEmpty ? '无' : result.seenRefs.join(' → ')}');
+        '${result.advancedSeconds > 0 ? ' · 窗口前移 ${result.advancedSeconds.toStringAsFixed(1)}s' : ''}');
+    _log('稳定命中：${result.stableRefs.isEmpty ? '无' : result.stableRefs.join(' → ')}');
+    _log('识别章节（含瞬时）：${result.seenRefs.isEmpty ? '无' : result.seenRefs.join(' → ')}');
     _log('比对 原文${alignment.referenceCount}词/转写${alignment.hypothesisCount}词 '
         'F1=${alignment.f1.toStringAsFixed(3)} '
         '覆盖率=${alignment.coverage.toStringAsFixed(3)} '
@@ -384,8 +409,8 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '自定义语料：adb push corpus_audio.wav（16 kHz/单声道/16bit）与原文 txt 到应用私有目录，'
-            '对应 files/corpus_audio.wav 与 files/reference_text.txt',
+            '内置语料由 tools/quran_offline/download_corpus.sh 生成（多节连续诵读）；'
+            '自定义语料把 16 kHz/单声道/16bit 的 WAV 推到 files/corpus/（可带同名 .txt 作为原文）',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
           ),
         ],
@@ -398,7 +423,7 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     final theme = Theme.of(context);
     final outcome = _outcomes[entry.item.id];
     final running = _runningId == entry.item.id;
-    final source = entry.reference?.source ?? entry.item.reference.ref ?? '设备原文文件';
+    final source = entry.reference?.source ?? entry.item.reference.label;
 
     Widget trailing;
     if (entry.error != null) {
@@ -417,22 +442,25 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
         ],
       );
     } else if (outcome != null) {
-      final hit = outcome.result.hit;
+      final result = outcome.result;
+      final judged = result.expectedRefs.isNotEmpty;
+      final hit = result.hit;
       trailing = Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text('F1=${outcome.alignment.f1.toStringAsFixed(2)}',
               style: theme.textTheme.labelLarge),
-          if (hit != null)
-            Text(
-              hit ? (outcome.result.stableHit == true ? '命中（稳定）' : '命中') : '未命中',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: hit ? Colors.green.shade700 : theme.colorScheme.error,
-              ),
-            )
-          else
-            Text(outcome.alignment.verdict, style: theme.textTheme.labelSmall),
+          Text(
+            judged
+                ? '章节 ${result.matchedRefs.length}/${result.expectedRefs.length}'
+                : outcome.alignment.verdict,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: judged
+                  ? (hit == true ? Colors.green.shade700 : theme.colorScheme.error)
+                  : null,
+            ),
+          ),
         ],
       );
     } else {
@@ -447,7 +475,9 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     return ListTile(
       enabled: entry.usable && _runningId == null,
       onTap: entry.usable ? () => _run(entry) : null,
-      title: Text(entry.item.title),
+      title: Text(
+        entry.surahName.isEmpty ? entry.item.title : '${entry.item.title} · ${entry.surahName}',
+      ),
       subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: trailing,
       isThreeLine: false,

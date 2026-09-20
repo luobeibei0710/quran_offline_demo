@@ -331,6 +331,43 @@ class QuranStreamingSession {
     _lastCommittedRef = null;
   }
 
+  /// 判断 `nextRef` 是否是 `previousRef` 的**合法延续**。
+  ///
+  /// 给窗口推进设闸用：只有「同一节」或「往后 1~3 节（同章）」「下一章开头几节」
+  /// 才认为匹配可信到可以裁剪窗口；匹配跳到别处（很可能是片段误匹配）时不推进，
+  /// 免得把真正没念到的音频裁掉。
+  ///
+  /// @param previousRef 上一节已确认引用（`surah:ayah` 或 `surah:ayahStart-ayahEnd`）
+  /// @param nextRef 本次冠军引用
+  /// @return 是否算延续（任一侧无法解析时按延续处理，保持宽松）
+  static bool isContinuation(String? previousRef, String? nextRef) {
+    if (previousRef == null || nextRef == null) return true;
+    final previous = _parseRef(previousRef, last: true);
+    final next = _parseRef(nextRef, last: false);
+    if (previous == null || next == null) return true;
+    final (previousSurah, previousAyah) = previous;
+    final (nextSurah, nextAyah) = next;
+    if (nextSurah == previousSurah) {
+      return nextAyah >= previousAyah && nextAyah <= previousAyah + 3;
+    }
+    return nextSurah == previousSurah + 1 && nextAyah <= 3;
+  }
+
+  /// 解析引用：`surah:ayah` 或 `surah:start-end`。
+  ///
+  /// @param ref 引用文本
+  /// @param last true 取区间末节，false 取区间首节
+  /// @return `(章号, 节号)`；解析失败时为 null
+  static (int, int)? _parseRef(String ref, {required bool last}) {
+    final parts = ref.split(':');
+    if (parts.length != 2) return null;
+    final surah = int.tryParse(parts[0]);
+    final range = parts[1].split('-');
+    final ayah = int.tryParse(last ? range.last : range.first);
+    if (surah == null || ayah == null) return null;
+    return (surah, ayah);
+  }
+
   /// 清空音频缓冲与稳定计数。
   ///
   /// 收尾识别后由会话内部调用：一次诵读结束但**不清空已确认序列与本底估计**，
@@ -362,7 +399,9 @@ class QuranStreamingSession {
     final keep = (endFrame + 1) * samplesPerFrame -
         _recognizer.config.windowOverlapSeconds * QuranRecognizer.sampleRate;
     if (keep <= 0) return 0;
-    final trimAt = _accumulated.length - windowSamples + keep.round();
+    // 单次最多裁掉 60%：即使已读位置判定有偏差，也不至于把窗口内容裁光
+    final bounded = math.max(keep, windowSamples * 0.4);
+    final trimAt = _accumulated.length - windowSamples + bounded.round();
     if (trimAt <= 0 || trimAt >= _accumulated.length) return 0;
     _accumulated = _accumulated.sublist(trimAt);
     return trimAt / QuranRecognizer.sampleRate;
@@ -431,6 +470,7 @@ class QuranStreamingSession {
 
       // 已确认进度：稳定命中且读满阈值时提交一次（同一节不重复提交，序列单调推进）
       var justCommitted = false;
+      final previousCommittedRef = _lastCommittedRef;
       if (stable &&
           champion != null &&
           spanWordCount > 0 &&
@@ -441,9 +481,16 @@ class QuranStreamingSession {
         justCommitted = true;
       }
 
-      // 窗口推进：提交后裁掉已读部分的音频，让下一轮识别围绕当前位置进行
+      // 窗口推进：提交后裁掉已读部分的音频，让下一轮识别围绕当前位置进行。
+      //
+      // 只有冠军是「已确认序列的延续」时才推进：匹配错了还裁剪窗口，会把真正没念到的
+      // 音频一起裁掉，后面越错越多（实测 159 s 语料被前移掉 155 s）。
       var advancedSeconds = 0.0;
-      if (justCommitted && config.advanceWindowOnCommit && readProgress != null) {
+      if (justCommitted &&
+          champion != null &&
+          config.advanceWindowOnCommit &&
+          readProgress != null &&
+          isContinuation(previousCommittedRef, champion.ref)) {
         advancedSeconds = _advanceWindow(
           endFrame: readProgress.endFrame,
           frames: evidence.timeSteps,
