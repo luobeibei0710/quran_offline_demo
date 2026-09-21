@@ -83,7 +83,6 @@ tools/quran_offline/samples/
 # Tilawa 对比工程的依赖（Node）
 tools/tilawa_compare/node_modules/
 
-# 广播语料音频候选：再分发权利未核实（manifest 中 redistributionRights=pending），
-# 且单文件数 MB 级，不入版本库。来源、字节数与 SHA256 记录在
-# resources/broadcast_quran/manifest.json，需要时按该记录重新获取并校验。
-resources/broadcast_quran/audio_candidates/
+# 广播语料音频候选：用户确认可入库（2 份王权章整章 MP3，约 15 MB）。
+# 来源、字节数、SHA256 与校验状态见 resources/broadcast_quran/manifest.json；
+# 测试音频不随 App 安装包分发（未列入 pubspec assets）。
