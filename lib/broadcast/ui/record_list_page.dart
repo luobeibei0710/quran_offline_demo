@@ -34,6 +34,7 @@ class _RecordListPageState extends State<RecordListPage> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
+  bool _deleting = false;
   int _total = 0;
   TargetLanguage? _languageFilter;
   MatchStatus? _statusFilter;
@@ -123,12 +124,71 @@ class _RecordListPageState extends State<RecordListPage> {
     await widget.services.session.refreshHistory();
   }
 
+  /// 清空全部历史。
+  ///
+  /// 录音中禁止（实施方案 §3.2）：识别进行时清空会让当前片段的落库与已删记录
+  /// 交叉，用户也容易误以为「刚说的话丢了」。
+  Future<void> _confirmDeleteAll() async {
+    if (widget.services.session.isRunning) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('识别进行中，无法清空历史；请先停止识别。')),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空全部历史记录？'),
+        content: Text(
+          '将删除全部 $_total 条记录，以及它们的匹配经文、比对指标、译文与待处理翻译任务。\n\n'
+          '该操作不可撤销；清空后展示序号从 #000001 重新开始。',
+        ),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+            child: const Text('全部删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _deleting = true);
+    try {
+      final removed = await widget.services.records.deleteAll();
+      await widget.services.session.refreshHistory();
+      await _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已清空 $removed 条历史记录')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible = _visible;
+    final canClear = _total > 0 && !_deleting;
     return Scaffold(
       appBar: AppBar(
         title: Text('历史记录（$_total）'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: _deleting ? '正在清空…' : '全部删除',
+            icon: _deleting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_sweep_outlined),
+            onPressed: canClear ? () => unawaited(_confirmDeleteAll()) : null,
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Padding(

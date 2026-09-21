@@ -340,6 +340,64 @@ void main() {
     });
   });
 
+  group('清空全部历史', () {
+    test('级联清理关联数据并重置展示序号', () async {
+      for (var index = 0; index < 3; index++) {
+        await repository.save(
+          draft(
+            utteranceId: 'utt-$index',
+            matches: <MatchedVerse>[verse(0, 112, 1)],
+            job: TranslationJob(
+              id: 'job-$index',
+              recordId: 'placeholder',
+              revision: 1,
+              targetLanguage: TargetLanguage.simplifiedChinese,
+              provider: 'mlkit',
+              sourceHash: 'h',
+              state: TranslationJobState.pending,
+              attemptCount: 0,
+              createdAt: DateTime.utc(2026, 9, 21),
+            ),
+          ),
+        );
+      }
+      expect(await repository.count(), 3);
+
+      expect(await repository.deleteAll(), 3);
+      expect(await repository.count(), 0);
+      expect(await repository.page(), isEmpty);
+      for (final table in <String>['record_matches', 'record_metrics', 'translation_jobs']) {
+        expect(await database.db.query(table), isEmpty, reason: '$table 应被级联清理');
+      }
+      expect(await repository.pendingJobs(), isEmpty);
+
+      // 「清空」语义：序号重置，新记录从 #000001 开始。
+      final fresh = await repository.save(draft(utteranceId: 'after-clear'));
+      expect(fresh.displaySequence, 1);
+    });
+
+    test('保留翻译缓存，避免重新识别时重复调用引擎', () async {
+      await repository.save(draft());
+      await repository.writeCache(
+        'cache-key-1',
+        '缓存译文',
+        provider: 'mlkit',
+        sourceKind: TranslationSourceKind.machineCanonical,
+      );
+      await repository.deleteAll();
+      expect(
+        await repository.readCache('cache-key-1'),
+        '缓存译文',
+        reason: '缓存键与记录无关，清空历史不应牵连缓存',
+      );
+    });
+
+    test('空库清空不报错', () async {
+      expect(await repository.deleteAll(), 0);
+      expect(await repository.count(), 0);
+    });
+  });
+
   group('历史分页', () {
     test('按时间倒序分页，序号稳定', () async {
       for (var index = 0; index < 5; index++) {

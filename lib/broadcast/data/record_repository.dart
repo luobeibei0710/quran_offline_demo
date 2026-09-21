@@ -289,6 +289,30 @@ class RecordRepository {
     return removed > 0;
   }
 
+  /// 清空全部历史记录。
+  ///
+  /// 与单条删除的区别：这是「清空」语义，展示序号计数器一并重置，新记录重新从
+  /// `#000001` 开始；单条删除仍不回收序号，两者互不影响。
+  ///
+  /// 级联清理匹配、指标、译文与翻译任务（外键 ON DELETE CASCADE）。
+  /// **翻译缓存不清理** —— 缓存键只含输入文本与语料/引擎信息，与记录无关，
+  /// 保留它可以让相同经文重新识别时直接命中，避免重复调用引擎。
+  ///
+  /// 调用方必须自行确认「识别中不得清空」（见实施方案 §3.2）。
+  ///
+  /// @return 被删除的记录数
+  Future<int> deleteAll() async {
+    return db.transaction((txn) async {
+      final removed = await txn.delete('utterance_records');
+      await txn.delete(
+        'settings',
+        where: 'key = ?',
+        whereArgs: <Object?>[_sequenceCounterKey],
+      );
+      return removed;
+    });
+  }
+
   /// 写入或更新一条译文（迟到结果的安全入口）。
   ///
   /// 只有在记录仍然存在、且修订号与目标语言与入参一致时才会落库；否则视为
