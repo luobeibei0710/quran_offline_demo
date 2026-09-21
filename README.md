@@ -342,7 +342,7 @@ CI 定义见 `.github/workflows/ci.yml`，三个 Job：
 |-----|------|
 | 静态分析 + 单元测试 | `flutter analyze` → `flutter test --coverage`，上传 `lcov.info` |
 | 构建 Android APK | 缓存/下载模型资产（约 103 MB）→ `flutter build apk --debug`，上传 APK 产物 |
-| 构建 iOS（模拟器） | 缓存 CocoaPods → `flutter build ios --simulator --debug`，只验证编译链接 |
+| 构建 iOS（设备切片，不签名） | 缓存 CocoaPods → `flutter build ios --debug --no-codesign`，只验证编译链接（**不用模拟器**：ML Kit 的传递依赖不支持 arm64 模拟器） |
 
 > CI 只覆盖 `download_assets.sh` 提供的资产，**不含** `*_ort122.onnx` 与 `sample_*.wav`，
 > 因此 CI 产出的 APK 仅用于验证编译链路，真实识别需在本地准备全部资产。

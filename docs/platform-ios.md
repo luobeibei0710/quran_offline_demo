@@ -54,6 +54,12 @@ flutter build ios --debug --no-codesign         # 只验证设备（arm64）切�
    MLImage、MLKitVision、MLKitCommon）声明不支持 arm64 模拟器架构，构建时会明确警告
    「do not support arm64 architecture」。**iOS 侧只能真机验证广播链路**；
    模拟器仍可跑旧 Demo 的离线路径。
+
+   > 影响不止运行时：模拟器构建只能退化成 **x86_64 切片**（Apple Silicon 上的模拟器
+   > 实际是 arm64，跑不了），在 Apple Silicon 机器上并不可靠。
+   > 因此 **CI 验证 iOS 链接链路时构建的是设备切片**
+   > （`flutter build ios --debug --no-codesign`，产物为 arm64），
+   > 不构建模拟器版本。日常本地调试模拟器仍可用，但别把它当作广播功能的验证手段。
 2. **CocoaPods 需要 UTF-8 终端环境**，否则会抛
    `Unicode Normalization not appropriate for ASCII-8BIT`（用 `LANG=en_US.UTF-8` 解决）。
 
@@ -96,7 +102,7 @@ xcrun devicectl device process launch --device <UDID> --terminate-existing --con
 
 | 能力 | 状态 |
 |------|------|
-| 模拟器编译链接（ObjC 桥 + ORT XCFramework + Pods） | 已通过，CI 覆盖 |
+| 设备切片编译链接（ObjC 桥 + ORT XCFramework + Pods + ML Kit） | 已通过，CI 覆盖（`--debug --no-codesign`，产物 arm64） |
 | 真机签名安装与启动 | 已通过 |
 | 真机内置样本自测 | 5/5 |
 | 真机三段离线语料 | 3/3，指标与 Android 完全一致（差值 0） |

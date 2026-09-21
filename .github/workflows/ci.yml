@@ -93,7 +93,7 @@ jobs:
           if-no-files-found: error
 
   build-ios:
-    name: 构建 iOS（模拟器）
+    name: 构建 iOS（设备切片，不签名）
     runs-on: macos-latest
     needs: analyze-and-test
     steps:
@@ -107,6 +107,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: 记录 Xcode 版本
+        run: xcodebuild -version
+
       - name: 缓存 CocoaPods
         uses: actions/cache@v4
         with:
@@ -119,5 +122,10 @@ jobs:
       # 只验证「ObjC 桥 + ORT XCFramework + Pods 集成」能编译链接：
       # 模型资产不入版本库（assets 目录内只有 .gitkeep），构建链路不依赖它，
       # 真实推理需要本地准备好资产后跑 flutter run。
-      - name: 构建模拟器版本
-        run: flutter build ios --simulator --debug
+      #
+      # 故意用设备切片（arm64）而不是模拟器：google_mlkit_translation 的传递依赖
+      # （GoogleMLKit / MLKitCommon / MLKitTranslate / MLKitVision / MLImage）
+      # 不支持 arm64 模拟器，模拟器构建只能退化成 x86_64 切片，在 Apple Silicon
+      # runner 上不可靠。设备切片的链接路径与真机完全一致，验证是同等的。
+      - name: 构建设备版本（不签名）
+        run: flutter build ios --debug --no-codesign
