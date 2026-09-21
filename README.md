@@ -20,8 +20,11 @@ Android 与 iOS 共用同一套 Dart 算法层，平台差异只在「调 ONNX R
 - **全离线**：声学模型、词表、经文库都在应用内，推理全部在本机完成；
 - **广播识别（新首页）**：三栏显示「实际 ASR 转写 / 匹配经文 / 目标译文」，三类文本各自标注来源，
   机器翻译不会被标成校订译本；记录持久化，重启仍在；
-- **独立三章新库**：广播功能只检索自己的 41 节语料，检索不到就明确显示未匹配，
-  **不回退旧 6236 节库**（有自动化测试证明它不读取旧库文件）；
+- **独立全经语料库**：广播功能只检索自己的全经 6236 节语料（Tanzil 快照 + 独立生成的
+  CTC token 表），检索不到就明确显示未匹配，**不回退旧 6236 节库**
+  （有自动化测试证明它不读取旧库文件）；
+- **62 种语言权威译本**：匹配到经文后查**人工译本**表（中文马坚、英文 Saheeh International
+  等，均为 QuranEnc 授权，界面显示署名与版本），未匹配的解说内容才走 ML Kit 机器翻译；
 - **实时跟读**：滑窗流式识别 + 稳定锁定，界面实时显示章节、标准经文、置信度与词进度；
 - **6236 节全文召回 + CTC 约束精排**：先按识别文本召回候选，再用 CTC 前向后向对数似然精排，
   而不是把问题简化成分类；
@@ -401,7 +404,8 @@ lib/
 │   ├── data/
 │   │   ├── app_database.dart                        SQLite 建库与迁移
 │   │   ├── record_repository.dart                   事务保存 / 分页 / 幂等 / 恢复
-│   │   └── broadcast_corpus.dart                    独立三章 41 节 + 独立索引
+│   │   ├── broadcast_corpus.dart                    全经 6236 节 + 独立索引（数据驱动）
+│   │   └── translation_catalog.dart                 62 语言译本目录与按需加载
 │   ├── domain/utterance_record.dart                 三类文本 + 指标 + 译文模型
 │   ├── translation/
 │   │   ├── offline_translation_engine.dart          引擎契约与失败分类
@@ -443,7 +447,7 @@ assets/broadcast_quran/tanzil_1_1/                  广播功能独立新库：4
                                                     CTC token 表 + manifest（入版本库，无音频）
 resources/broadcast_quran/                          新库上游归档与音频候选（未接入安装包）
 tools/quran_offline/                                资产下载、模型改造与 Python 验证脚本
-tools/broadcast_quran/                              新库 CTC token 表生成与口径自检
+tools/broadcast_quran/                              全经语料构建、CTC token 表生成、62 语言译本下载
 docs/                                               验证记录、平台联调说明
 .github/workflows/ci.yml                            静态分析 + 测试 + APK 构建
 ```
