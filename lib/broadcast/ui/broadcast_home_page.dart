@@ -71,13 +71,19 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
 
   Future<void> _prepareLanguagePack() async {
     setState(() => _preparing = true);
+    debugPrint(
+      '[Broadcast] 开始准备语言包：目标 ${_session.targetLanguage.code}'
+      '（阿→中经英语中转，需阿拉伯语/英语/中文三份）',
+    );
     try {
       final status = await widget.services.engine.prepare(
         target: _session.targetLanguage,
         allowDownload: true,
       );
+      debugPrint('[Broadcast] 语言包准备结束：${status.wireName}');
       if (mounted) setState(() => _engineStatus = status);
     } on TranslationException catch (error) {
+      debugPrint('[Broadcast] 语言包准备失败：${error.code.wireName} — ${error.message}');
       if (mounted) {
         setState(() => _engineStatus = TranslationEngineStatus.failed);
         ScaffoldMessenger.of(
@@ -91,6 +97,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
 
   Future<void> _toggleLanguage(TargetLanguage language) async {
     if (_session.updateTargetLanguage(language)) {
+      debugPrint('[Broadcast] 目标语言切换为 ${language.code}（已持久化）');
       await widget.services.persistTargetLanguage(language);
       await _refreshEngineStatus();
       unawaited(widget.services.drainTranslations());

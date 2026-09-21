@@ -559,15 +559,20 @@ class UtteranceRecord {
 
   /// 取指定语言的译文。
   ///
+  /// 优先返回已完成的译文：同一记录可能有「进行中」的占位行，若它恰好排在
+  /// 结果行之后（同一毫秒创建时排序不稳定），界面会读到空译文。
+  ///
   /// @param language 目标语言
   /// @return 译文；该语言尚未生成时返回 null
   RecordTranslation? translationFor(TargetLanguage language) {
-    for (final translation in translations.reversed) {
-      if (translation.targetLanguage == language && translation.revision == revision) {
-        return translation;
-      }
+    RecordTranslation? match;
+    for (final translation in translations) {
+      if (translation.targetLanguage != language || translation.revision != revision) continue;
+      final isDone = translation.status == TranslationStatus.done;
+      final existingDone = match?.status == TranslationStatus.done;
+      if (isDone || !existingDone) match = translation;
     }
-    return null;
+    return match;
   }
 
   /// 经文范围摘要（供历史列表使用）。

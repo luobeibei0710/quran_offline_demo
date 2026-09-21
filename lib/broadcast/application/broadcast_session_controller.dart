@@ -129,6 +129,9 @@ class BroadcastSessionController extends ChangeNotifier {
   /// 最近记录（新到旧）。
   List<UtteranceRecord> get recentRecords => List<UtteranceRecord>.unmodifiable(_recent);
 
+  /// 当前会话已保存的记录数（用于停止时汇报本次结果）。
+  int _sessionSaved = 0;
+
   /// 会话内估计的安静本底，可用于界面提示收音强度。
   double get quietBaseline => _segmenter?.quietBaseline ?? 0;
 
@@ -179,6 +182,12 @@ class BroadcastSessionController extends ChangeNotifier {
       _lastPreviewAt = 0;
       final stream = await audio.start();
       _status = BroadcastSessionStatus.running;
+      _sessionSaved = 0;
+      debugPrint(
+        '[Broadcast] 开始识别：目标语言 ${_targetLanguage.code}，'
+        '断句 静音≥${segmenterConfig.silenceSeconds}s / 最短 ${segmenterConfig.minSpeechSeconds}s / '
+        '最长 ${segmenterConfig.maxSeconds}s',
+      );
       notifyListeners();
       _audioSubscription = stream.listen(
         _onChunk,
@@ -222,6 +231,10 @@ class BroadcastSessionController extends ChangeNotifier {
     }
     await _drainFinalQueue();
 
+    debugPrint(
+      '[Broadcast] 停止识别：本次会话保存 $_sessionSaved 条记录'
+      '${_queueOverflowCount > 0 ? '，另有 $_queueOverflowCount 个片段因过载被丢弃' : ''}',
+    );
     _status = BroadcastSessionStatus.idle;
     _finishing = false;
     _statusMessage = _queueOverflowCount > 0
@@ -251,6 +264,7 @@ class BroadcastSessionController extends ChangeNotifier {
       // 超载：丢弃最旧的排队片段并计数，界面会明确提示，不静默丢录音。
       _finalQueue.removeAt(0);
       _queueOverflowCount++;
+      debugPrint('[Broadcast] 终稿队列超载：丢弃最旧片段，累计丢弃 $_queueOverflowCount 次');
     }
     _finalQueue.add(segment);
   }
@@ -273,16 +287,34 @@ class BroadcastSessionController extends ChangeNotifier {
   }
 
   Future<void> _processFinal(SpeechSegment segment) async {
+    final watch = Stopwatch()..start();
     final fragment = await transcriber.transcribe(
       segment.samples,
       offsetSample: segment.startSample,
     );
+    final seconds = (segment.endSample - segment.startSample) / transcriber.sampleRate;
     if (fragment.isEmpty) {
       // 纯噪声：不建伪句，也不产生伪经文。
+      debugPrint(
+        '[Broadcast] 片段 ${segment.startSample}-${segment.endSample}（${seconds.toStringAsFixed(1)}s，'
+        '${segment.reason.name}）无有效语音内容，不建记录',
+      );
       return;
     }
     final outcome = matcher.match(fragment);
     if (outcome.asrText.trim().isEmpty) return;
+    debugPrint(
+      '[Broadcast] 片段 ${seconds.toStringAsFixed(1)}s（${segment.reason.name}）'
+      '识别分段 ${fragment.segments.length} 段 → '
+      '状态=${outcome.status.name} 范围=${outcome.scope.name} '
+      '候选=${outcome.candidateRef ?? '-'} '
+      '解释比例=${outcome.precision?.toStringAsFixed(2) ?? '-'} '
+      '覆盖=${outcome.coverage?.toStringAsFixed(2) ?? '-'} '
+      '置信=${outcome.confidence?.toStringAsFixed(2) ?? '-'} '
+      '词数=${fragment.words.length}'
+      '${outcome.rejectionReason == null ? '' : ' 原因=${outcome.rejectionReason}'}',
+    );
+    debugPrint('[Broadcast] 实际转写：${outcome.asrText}');
 
     final job = outcome.needsTranslation
         ? TranslationJob(
@@ -320,9 +352,19 @@ class BroadcastSessionController extends ChangeNotifier {
       ),
     );
     _recordCount++;
+    _sessionSaved++;
     _recent.insert(0, record);
     if (_recent.length > 20) _recent.removeLast();
     _draftText = '';
+    watch.stop();
+    debugPrint(
+      '[Broadcast] 记录 #${record.displaySequence} 已保存'
+      '（${record.matchSummary}，${record.matchStatus.name}/${record.scope.wireName}，'
+      'F1=${record.metrics?.f1?.toStringAsFixed(3) ?? '不可用'}，'
+      'WER=${record.metrics?.strictWer?.toStringAsFixed(3) ?? '不可用'}，'
+      '词数 ${record.metrics?.referenceWords ?? '-'}/${record.metrics?.hypothesisWords ?? '-'}，'
+      '总耗时 ${watch.elapsedMilliseconds}ms）',
+    );
     notifyListeners();
 
     if (job != null) {

@@ -21,6 +21,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../data/broadcast_corpus.dart';
 import '../data/record_repository.dart';
 import '../domain/utterance_record.dart';
@@ -210,6 +212,11 @@ class TranslationCoordinator {
     final provider = engine.engineId;
     final input = await resolveInput(record, language);
     final sourceHash = _stableHash(input.text);
+    debugPrint(
+      '[Broadcast] 翻译任务：记录 #${record.displaySequence} 语言=${language.label} '
+      '来源=${input.sourceKind.wireName} 范围=${input.inputScope} '
+      '输入 ${input.text.length} 字符',
+    );
     final cacheKey = cacheKeyFor(
       input,
       language,
@@ -218,11 +225,19 @@ class TranslationCoordinator {
       generation: engine.generation,
     );
 
+    // 占位行与结果行必须使用同一个 provider：译文行的唯一约束是
+    // (recordId, revision, targetLanguage, provider)，若「进行中」用 engineId、
+    // 结果用 curated，就会在同一记录同一语言下留下两行；两行 created_at 同毫秒时
+    // 取译文的顺序不确定，界面可能读到空占位。
+    final effectiveProvider = input.sourceKind == TranslationSourceKind.curatedEdition
+        ? 'curated'
+        : provider;
+
     await records.updateJobState(job.id, TranslationJobState.running, incrementAttempt: true);
     await _writeTranslation(
       record: record,
       language: language,
-      provider: provider,
+      provider: effectiveProvider,
       sourceKind: input.sourceKind,
       sourceHash: sourceHash,
       inputScope: input.inputScope,
@@ -236,7 +251,7 @@ class TranslationCoordinator {
       await _writeTranslation(
         record: record,
         language: language,
-        provider: 'curated',
+        provider: effectiveProvider,
         sourceKind: input.sourceKind,
         sourceHash: sourceHash,
         inputScope: input.inputScope,
@@ -246,11 +261,13 @@ class TranslationCoordinator {
         editionId: input.curated?.editionId,
       );
       await records.updateJobState(job.id, TranslationJobState.done);
+      debugPrint('[Broadcast] 翻译完成：命中校订译本 ${input.curated?.editionId}（未经机器翻译）');
       return TranslationStatus.done;
     }
 
     final cached = await records.readCache(cacheKey);
     if (cached != null) {
+      debugPrint('[Broadcast] 翻译缓存命中：复用已有译文（未调用引擎）');
       await _writeTranslation(
         record: record,
         language: language,
@@ -297,8 +314,11 @@ class TranslationCoordinator {
         engineId: result.engineId,
       );
       await records.updateJobState(job.id, TranslationJobState.done);
+      final preview = result.text.length > 60 ? '${result.text.substring(0, 60)}…' : result.text;
+      debugPrint('[Broadcast] 翻译完成：$preview（${result.elapsedMs}ms，${result.engineId}）');
       return TranslationStatus.done;
     } on TranslationException catch (error) {
+      debugPrint('[Broadcast] 翻译失败：${error.code.wireName} — ${error.message}');
       final status = error.code == TranslationErrorCode.modelMissing ||
               error.code == TranslationErrorCode.offlineDownloadUnavailable
           ? TranslationStatus.modelMissing
