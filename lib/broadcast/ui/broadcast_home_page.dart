@@ -343,6 +343,17 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     // 识别中：译文栏跟随候选同步刷新（候选稳定后自动生成预览译文）。
     final preview = _session.isRunning ? _session.preview : null;
     if (preview != null) {
+      if (preview.outcome.matches.isEmpty) {
+        // 未命中库内经文（章前求护词、解说、其他章节）：预览译文跟随匹配经文，
+        // 因此这里显示等待状态而不是翻译转写；终稿的未匹配记录仍会按需求翻译转写。
+        return TextSectionCard(
+          title: '目标译文',
+          subtitle: '${language.label} · 等待匹配经文',
+          body: '',
+          emptyHint: '预览译文跟随匹配经文：当前片段尚未命中库内三章'
+              '（可能是章前求护词、解说词或其他章节），命中后自动翻译对应标准原文。',
+        );
+      }
       if (preview.translationText != null && preview.translationText!.isNotEmpty) {
         return TextSectionCard(
           title: '目标译文',

@@ -216,6 +216,24 @@ void main() {
   });
 
   group('断句与落库', () {
+    test('识别中未命中库内经文时不翻译转写，预览译文只跟随匹配经文', () async {
+      // 场景来自真机实测：诵读者先念求护词（库外内容），旧逻辑会跟着转写翻译，
+      // 得到与经文无关且不断跳动的译文。
+      final controller = buildController(targetTokens: <int>[19, 21, 30, 43]);
+      await controller.start();
+      audio.controller.add(_speech(3));
+      await settle();
+      await settle();
+
+      final preview = controller.preview;
+      expect(preview, isNotNull);
+      expect(preview!.outcome.matches, isEmpty, reason: '库外内容应无候选');
+      expect(preview.translationText, isNull, reason: '预览译文只跟随匹配经文，不得翻译转写');
+      expect(preview.translationPending, isFalse);
+      await controller.stop();
+      controller.dispose();
+    });
+
     test('识别中三栏预览同步：候选经文与预览译文在片段进行中出现，终稿后清空', () async {
       final controller = buildController();
       await controller.start();

@@ -112,7 +112,7 @@ class BroadcastSessionController extends ChangeNotifier {
     required this.library,
     TargetLanguage targetLanguage = TargetLanguage.simplifiedChinese,
     this.segmenterConfig = const UtteranceSegmenterConfig(),
-    this.previewIntervalSeconds = 2,
+    this.previewIntervalSeconds = 1,
   }) : _targetLanguage = targetLanguage;
 
   /// 片段转写器。
@@ -137,6 +137,10 @@ class BroadcastSessionController extends ChangeNotifier {
   final UtteranceSegmenterConfig segmenterConfig;
 
   /// 预览刷新间隔（秒）。
+  ///
+  /// 真机实测（Redmi 24117RK2CC）：候选匹配本身仅 6–87ms，瓶颈在间隔而非匹配；
+  /// 一轮预览推理约 0.4–1s（随片段变长），取 1s 后长片段会由 `_busy` 保护自适应
+  /// （推理没完成就跳过本轮），不会排队。
   final double previewIntervalSeconds;
 
   /// 终稿队列上限：超过则停止接收并提示（避免静默丢弃录音）。
@@ -487,20 +491,43 @@ class BroadcastSessionController extends ChangeNotifier {
   }
 
   /// 候选经连续两次相同即触发一次预览翻译（与终稿共用缓存，不重复调引擎）。
+  ///
+  /// 预览译文**只跟随匹配经文**：未命中库内经文（章前求护词、解说、其他章节）时
+  /// 不翻译转写 —— 实测诵读者先念求护词的十几秒里，转写内容频繁变化，跟着翻译
+  /// 转写只会得到跳动的、与经文无关的译文。未匹配片段的正式译文仍按需求在终稿
+  /// 落库时翻译实际转写，并带「机器翻译·识别转写」来源标记。
   void _trackPreviewStability(BroadcastMatchOutcome outcome) {
-    final ref = outcome.candidateRef;
-    if (ref == null) {
+    if (outcome.matches.isEmpty) {
       _lastPreviewRef = null;
       _previewStableCount = 0;
+      _clearPreviewTranslation();
       return;
     }
-    if (ref != _lastPreviewRef) {
+    final ref = outcome.candidateRef;
+    if (ref == null || ref != _lastPreviewRef) {
       _lastPreviewRef = ref;
       _previewStableCount = 1;
+      // 候选切换：清掉旧候选的译文，避免「新经文配旧译文」。
+      _clearPreviewTranslation();
       return;
     }
     _previewStableCount++;
     if (_previewStableCount == 2) unawaited(_translatePreview(outcome));
+  }
+
+  void _clearPreviewTranslation() {
+    if (_preview == null) return;
+    if (_preview!.translationText == null &&
+        _preview!.translationSource == null &&
+        !_preview!.translationPending) {
+      return;
+    }
+    _preview = _preview!.copyWith(
+      translationText: null,
+      translationSource: null,
+      translationPending: false,
+    );
+    notifyListeners();
   }
 
   /// 预览译文：命中内存或数据库缓存时零成本返回；未命中调一次引擎并写入缓存，
