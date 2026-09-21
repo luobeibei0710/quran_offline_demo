@@ -36,6 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   record: ^6.2.1
   permission_handler: ^12.0.1
+  sqflite: ^2.4.2+1
+  path_provider: ^2.1.6
+  google_mlkit_translation: ^0.14.0
 
 dev_dependencies:
   flutter_test:
@@ -47,6 +50,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  sqflite_common_ffi: ^2.4.0+3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -66,6 +70,8 @@ flutter:
     - assets/quran_offline/corpus/
     # 比对用原文（参考答案，约 3 KB，纳入版本库）
     - assets/quran_reference/
+    # 广播功能独立三章语料库（第 1、67、112 章，41 节；与旧经文库相互独立）
+    - assets/broadcast_quran/tanzil_1_1/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

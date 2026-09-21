@@ -1,6 +1,8 @@
 # Uncomment this line to define a global platform for your project
-# onnxruntime-objc 1.22.0 要求 iOS 15.1 起（Xcode 工程的 IPHONEOS_DEPLOYMENT_TARGET 同步为 15.1）
-platform :ios, '15.1'
+# onnxruntime-objc 1.22.0 只要求 iOS 15.1；取 15.5 是因为广播功能的
+# google_mlkit_translation 0.14.0 原生 podspec 声明 platform :ios, '15.5'。
+# Podfile 与 Xcode 工程的 IPHONEOS_DEPLOYMENT_TARGET 必须同步。
+platform :ios, '15.5'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
