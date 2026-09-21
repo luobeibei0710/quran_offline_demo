@@ -90,6 +90,19 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
           context,
         ).showSnackBar(SnackBar(content: Text('语言包准备失败：${error.message}')));
       }
+    } catch (error) {
+      // 兜底：插件原生层（如 ML Kit）抛的是 PlatformException，不是
+      // TranslationException。iOS 上实测过一次未捕获的
+      // `PlatformException(cancelled, Model manager deallocated during download)`
+      // 直接把页面打崩（用户点击即闪退）。语言包准备失败必须是可恢复状态，
+      // 绝不能让它冒泡到 Dart VM。
+      debugPrint('[Broadcast] 语言包准备异常（未分类）：$error');
+      if (mounted) {
+        setState(() => _engineStatus = TranslationEngineStatus.failed);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('语言包准备失败：$error')));
+      }
     } finally {
       if (mounted) setState(() => _preparing = false);
     }

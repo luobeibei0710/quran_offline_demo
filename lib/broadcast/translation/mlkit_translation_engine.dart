@@ -12,6 +12,7 @@
 /// 支持同一记录重试。
 library;
 
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 
 import '../domain/utterance_record.dart';
@@ -32,6 +33,15 @@ class MlKitTranslationEngine implements OfflineTranslationEngine {
 
   /// 已确认就绪的语言。
   final Set<TargetLanguage> _ready = <TargetLanguage>{};
+
+  /// 模型管理器：**必须保持为长生命周期实例**。
+  ///
+  /// 每次调用现造一个 `OnDeviceTranslatorModelManager()` 时，iOS 上会在下载过程中
+  /// 报 `Model manager deallocated during download`（原生侧在实例被释放后仍持有
+  /// 弱引用）。持有字段可避免这一释放路径。
+  OnDeviceTranslatorModelManager? _modelManager;
+  OnDeviceTranslatorModelManager get _manager =>
+      _modelManager ??= OnDeviceTranslatorModelManager();
 
   int _generation = 1;
 
@@ -116,7 +126,7 @@ class MlKitTranslationEngine implements OfflineTranslationEngine {
   @override
   Future<TranslationEngineStatus> statusFor(TargetLanguage target) async {
     if (mlKitLanguage(target) == null) return TranslationEngineStatus.unsupportedLanguage;
-    final manager = OnDeviceTranslatorModelManager();
+    final manager = _manager;
     for (final language in requiredModels(target)) {
       final downloaded = await manager.isModelDownloaded(language.bcpCode);
       if (!downloaded) return TranslationEngineStatus.missing;
@@ -136,7 +146,7 @@ class MlKitTranslationEngine implements OfflineTranslationEngine {
         'ML Kit 不支持该目标语言',
       );
     }
-    final manager = OnDeviceTranslatorModelManager();
+    final manager = _manager;
     var downloadedSomething = false;
     for (final language in requiredModels(target)) {
       if (await manager.isModelDownloaded(language.bcpCode)) continue;
@@ -146,7 +156,19 @@ class MlKitTranslationEngine implements OfflineTranslationEngine {
           '缺少 ${language.bcpCode} 语言包，且当前不允许联网下载',
         );
       }
-      final ok = await manager.downloadModel(language.bcpCode, isWifiRequired: false);
+      final bool ok;
+      try {
+        ok = await manager.downloadModel(language.bcpCode, isWifiRequired: false);
+      } on PlatformException catch (error) {
+        // 插件原生层抛的是 PlatformException，不是我们的 TranslationException。
+        // iOS 上实测：下载过程中若 ModelManager 被释放（例如用户中途切换目标语言、
+        // 触发引擎重建），原生返回 `cancelled / Model manager deallocated during
+        // download`。必须在这里转换，否则异常会一路冒泡到 UI 把页面打崩。
+        throw TranslationException(
+          TranslationErrorCode.modelMissing,
+          '${language.bcpCode} 语言包下载失败：${error.message ?? error.code}',
+        );
+      }
       if (!ok) {
         throw TranslationException(
           TranslationErrorCode.modelMissing,
