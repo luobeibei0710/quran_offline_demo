@@ -170,7 +170,11 @@ void main() {
     );
   }
 
-  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 120));
+  /// 等待异步链路推进。
+  ///
+  /// 取 250ms 而不是刚好够用的较短值：`flutter test` 并发跑多个测试文件时，
+  /// 固定等待过短会偶发失败（实测 120ms 在负载高时会漏掉一次推理 + 落库）。
+  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 250));
 
   group('会话生命周期', () {
     test('未授权麦克风时明确提示且不进入识别状态', () async {
