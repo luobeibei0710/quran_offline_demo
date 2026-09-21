@@ -65,6 +65,10 @@ app.*.map.json
 # 获取方式：bash tools/quran_offline/download_assets.sh
 /assets/quran_offline/*
 !/assets/quran_offline/.gitkeep
+# 例外：词表只有 21 KB，是两端共用的 ASR 侧资源，且广播侧的单元测试
+# （BroadcastQuranLibrary.load → QuranAssets.loadVocabularyOnly）需要它。
+# 不入库会让干净 clone 下的 flutter test 依赖 103 MB 模型下载，故随仓库分发。
+!/assets/quran_offline/vocab.json
 
 # Python 验证脚本的虚拟环境与缓存（.venv、.venv122 等）
 **/.venv*/

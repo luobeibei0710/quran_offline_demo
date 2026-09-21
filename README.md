@@ -120,7 +120,8 @@ AppBar 右上角两个入口：**记录 N**（历史列表）与**扳手图标**
 
 ### 1. 获取模型与数据
 
-**模型、词表与旧库数据表不入版本库**，需自行下载：
+**模型与旧库数据表不入版本库**，需自行下载（词表 `vocab.json` 是唯一例外：
+只有 21 KB，且广播侧单元测试加载语料库时需要它，因此随仓库分发）：
 
 ```bash
 # 下载原版模型与数据表（含 sha256 校验）
@@ -296,13 +297,16 @@ flutter analyze   # 静态分析
 flutter test      # 24 个测试文件 / 207 个用例
 ```
 
-测试**不依赖**真实模型资产：用例通过 `FakeAssetBundle` 注入最小化内存资产、
-通过 `ScriptedOrtRunner` 注入合成声学证据、通过 `buildSpeechLikeSamples` 生成可驱动 VAD 的
-类语音信号，因此 clone 后无需下载任何模型即可跑通全链路
-（真机麦克风与模型推理仍需 `flutter run` 验证）。
+测试所需的资产全部随仓库分发，**干净 clone 后无需下载任何东西**即可跑通全套测试：
 
-广播侧 6 个测试文件**直接读取已入库的全经语料与译本**
-（`assets/broadcast_quran/full/**`），用于校验语料完整性、译本目录与查表。
+- 旧 Demo 侧的用例通过 `FakeAssetBundle` 注入最小化内存资产、
+  通过 `ScriptedOrtRunner` 注入合成声学证据、通过 `buildSpeechLikeSamples` 生成可驱动 VAD 的
+  类语音信号，不读真实模型；
+- 广播侧的 6 个测试文件读取**已入库**的全经语料与译本（`assets/broadcast_quran/full/**`），
+  并需要共享词表 `assets/quran_offline/vocab.json`（也已入库，见
+  [获取模型与数据](#1-获取模型与数据)）。
+
+真机麦克风与模型推理仍需 `flutter run` 验证。
 
 | 测试文件 | 覆盖内容 |
 |----------|----------|
@@ -401,7 +405,7 @@ ios/Runner/QuranOrtBridge.{h,m}                     ONNX Runtime 桥
 ios/Runner/AppDelegate.swift                        通道注册
 test/                                               单元测试与页面冒烟测试
 assets/broadcast_quran/full/                        广播全经语料 + 62 语言译本（入版本库）
-assets/quran_offline/                               模型与旧库资产（不入版本库）
+assets/quran_offline/                               模型与旧库资产（模型不入版本库；vocab.json 入库）
 assets/quran_offline/corpus/                        语料校核用的多节连续诵读（不入版本库）
 assets/quran_reference/                             旧比对页原文（入版本库）
 resources/broadcast_quran/                          上游归档 + 全经音频清单（音频不入版本库）
@@ -460,7 +464,8 @@ docs/                                               架构、匹配、验收与�
   高亮滞后/超前的量还没有按真人朗读实测。详见 [旧 Demo 与流式链路](docs/legacy-demo.md)。
 - **置信度是启发式**：按「与次优的相对差距（15%）」映射，完美匹配与长窗口下会饱和到 1.00，
   仅用于界面提示，不参与判定。
-- **模型与测试音频未入库**：模型、`sample_*.wav` 与内置语料 WAV 都不进版本库，
+- **模型与测试音频未入库**：模型、`sample_*.wav` 与内置语料 WAV 都不进版本库
+  （词表 `vocab.json` 例外，仅 21 KB，随仓库分发以保证测试可离线运行），
   clone 后需分别准备，否则相应验证会显示「识别失败」或「不可用」。
 - **iOS 真机仅覆盖离线语料路径**：三段内置语料的 F1/P/R 与 Android 完全一致，
   但麦克风实采与实时跟踪仍未在 iOS 上验证。

@@ -172,6 +172,9 @@ python3.12 tool/generate_arabic_forms.py --check
 内置语料由 `tools/quran_offline/download_corpus.sh` 从 Quran.com CDN 取逐节诵读并拼接，
 **不入版本库**；模型同样不入库，用 `download_assets.sh` 获取。
 
+例外只有共享词表 `assets/quran_offline/vocab.json`（21 KB）：广播侧的单元测试加载语料库时
+需要它，因此**随仓库分发**，保证干净 clone 下 `flutter test` 不依赖 103 MB 模型下载。
+
 ## 7. 后续范围
 
 若下一步要求「严格逐字准确率也 ≥ 90%」，需分别解决可解释的书写体映射与剩余声学错误，
