@@ -507,6 +507,7 @@ docs/                                               验证记录、平台联调�
 
 | 文档 | 内容 |
 |------|------|
+| [docs/broadcast-baseline-20260921.md](docs/broadcast-baseline-20260921.md) | 广播识别当前基线：主机/真机匹配指标、端侧性能、翻译质量样本与回归对照方法 |
 | [docs/broadcast-implementation-20260921.md](docs/broadcast-implementation-20260921.md) | 广播识别与离线翻译的实际交付内容、可复现验证命令与未验收项 |
 | [docs/broadcast-transcription-translation-plan-20260920.md](docs/broadcast-transcription-translation-plan-20260920.md) | 广播功能的需求与实施方案（含产品规格、数据设计与验收矩阵） |
 | [docs/offline-accuracy-20260920.md](docs/offline-accuracy-20260920.md) | 默认离线实际 ASR 的设计、三段主机回放证据、指标口径与验收边界 |
