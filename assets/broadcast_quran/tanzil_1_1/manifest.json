@@ -1,0 +1,34 @@
+{
+  "corpusId": "tanzil-1.1-uthmani-surah-001-067-112",
+  "corpusVersion": "1.1",
+  "provider": "Tanzil Project",
+  "sourceUrl": "https://tanzil.net/pub/download/index.php?quranType=uthmani&outType=txt-2",
+  "downloadOptions": "quranType=uthmani, outType=txt-2 (Uthmani, UTF-8, with surah/ayah numbers)",
+  "retrievedAt": "2026-09-20T10:43:11Z",
+  "licenseUrl": "https://tanzil.net/docs/Text_License",
+  "sourceFile": "resources/broadcast_quran/tanzil_1_1/quran-uthmani.txt",
+  "sourceFileBytes": 1370878,
+  "sourceSha256": "bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8",
+  "sourceVerseCount": 6236,
+  "surahs": [
+    1,
+    67,
+    112
+  ],
+  "verseCount": 41,
+  "versesFile": "verses_001_067_112.json",
+  "versesSha256": "42b38cec0ba7b4db7549b9bdc45ac9913ecc8ce67777b2f6bfff73ecf808a83a",
+  "noticeFile": "NOTICE.txt",
+  "noticeSha256": "72493509d507314f60c018fd33aa57d9064a0de42be8926745e4953f59925c62",
+  "tokenTableFile": "verse_ctc_tokens.json",
+  "tokenTableSha256": "5de652b4b68a551ab7c5c0964718edd30f3b219496bfdacb522485ea387944b7",
+  "generatedBy": "tools/broadcast_quran/generate_verse_tokens.py",
+  "normalizationVersion": "quran-text-normalize-1",
+  "tokenTableNote": "由 tools/broadcast_quran/generate_verse_tokens.py 从 assets/quran_offline/vocab.json 与本节语料独立生成；不含旧经文库的任何文本或索引。上游 Tilawa 的 unigram 分词分数未公开，本表用确定性最少 token 数分词，与官方表逐 token 完全一致率单节约 21%，因此本库的 CTC 排序阈值必须用真实广播音频重新标定，不能直接沿用旧库常数。",
+  "encoderAgreementWithLegacy": {
+    "singleVerseExact": 0.208,
+    "spanExact": 0.033,
+    "measuredBy": "tools/broadcast_quran/generate_verse_tokens.py --verify-legacy"
+  },
+  "chapterOpeningNote": "67:1 与 112:1 的 sourceText 按上游原样保留章首太斯米前缀；派生结构单列章首引导与首节主体，节数不增加。"
+}

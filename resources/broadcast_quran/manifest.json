@@ -1,0 +1,53 @@
+{
+  "retrievedAt": "2026-09-20T10:43:11Z",
+  "text": {
+    "path": "tanzil_1_1/quran-uthmani.txt",
+    "sourceUrl": "https://tanzil.net/pub/download/index.php?quranType=uthmani&outType=txt-2",
+    "version": "1.1",
+    "bytes": 1370878,
+    "sha256": "bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8",
+    "sourceVerseCount": 6236,
+    "selectedSurahs": [
+      1,
+      67,
+      112
+    ],
+    "selectedVerseCount": 41,
+    "derivedFile": "tanzil_1_1/verses_001_067_112.json",
+    "licenseUrl": "https://tanzil.net/docs/Text_License",
+    "preservedNotice": true
+  },
+  "audio": [
+    {
+      "path": "audio_candidates/067-alafasy-mp3quran.mp3",
+      "sourceUrl": "https://server8.mp3quran.net/afs/067.mp3",
+      "bytes": 7293947,
+      "sha256": "ded3b53cfc22c3544170f222068472174e200f5958b35561d298bb4db7e54f11",
+      "durationSeconds": 455.444878,
+      "surah": 67,
+      "reciter": "Mishary Rashid Alafasy",
+      "sampleRate": 44100,
+      "channels": 2,
+      "fullDecodePassed": true,
+      "listened": false,
+      "contentAlignmentVerified": false,
+      "redistributionRights": "pending"
+    },
+    {
+      "path": "audio_candidates/067-alafasy-ru.mp3",
+      "sourceUrl": "https://cdn.alislam.ru/quran/audio-surah/128/ar.alafasy/67.mp3",
+      "bytes": 7882825,
+      "sha256": "1f3c989413ec76dfa15952873be01b3467ed0069205132ca4ae925d200bc5f63",
+      "durationSeconds": 455.426756,
+      "surah": 67,
+      "reciter": "Mishary Rashid Alafasy",
+      "sampleRate": 44100,
+      "channels": 2,
+      "fullDecodePassed": true,
+      "listened": false,
+      "contentAlignmentVerified": false,
+      "redistributionRights": "pending"
+    }
+  ],
+  "appIntegrated": false
+}

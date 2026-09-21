@@ -82,3 +82,8 @@ tools/quran_offline/samples/
 
 # Tilawa 对比工程的依赖（Node）
 tools/tilawa_compare/node_modules/
+
+# 广播语料音频候选：再分发权利未核实（manifest 中 redistributionRights=pending），
+# 且单文件数 MB 级，不入版本库。来源、字节数与 SHA256 记录在
+# resources/broadcast_quran/manifest.json，需要时按该记录重新获取并校验。
+resources/broadcast_quran/audio_candidates/
