@@ -160,12 +160,6 @@ class BroadcastSessionController extends ChangeNotifier {
   bool _previewTranslating = false;
   final Map<String, String> _previewTranslationMemo = <String, String>{};
 
-  /// 预览匹配用轻配置：topK 减半以控制预览开销；终稿仍用完整配置。
-  late final QuranMatchService _previewMatcher = QuranMatchService(
-    library: library,
-    config: const BroadcastMatchConfig(topK: 16),
-  );
-
   UtteranceSegmenter? _segmenter;
   StreamSubscription<Float32List>? _audioSubscription;
   final List<SpeechSegment> _finalQueue = <SpeechSegment>[];
@@ -469,7 +463,10 @@ class BroadcastSessionController extends ChangeNotifier {
       );
       if (fragment.words.isEmpty || _status != BroadcastSessionStatus.running) return;
       final matchWatch = Stopwatch()..start();
-      final outcome = _previewMatcher.match(fragment);
+      // 与终稿使用同一个匹配器（同 topK/同阈值）：真机实测曾用 topK=16 的轻配置，
+      // 导致同一段音频「预览解释比例 0.54 被拒、终稿 0.95 成功」，预览长期显示未匹配。
+      // 实测匹配耗时仅 6–90ms，没有必要为预览降配。
+      final outcome = matcher.match(fragment);
       matchWatch.stop();
       _draftText = fragment.text;
       _preview = BroadcastPreview(draftText: fragment.text, outcome: outcome);

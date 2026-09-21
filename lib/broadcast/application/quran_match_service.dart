@@ -55,6 +55,8 @@ class BroadcastMatchConfig {
   /// @param precisionBand 裁决时「解释比例」的分带宽度（避免浮点抖动）
   /// @param precisionWeight 可信度中解释比例的权重
   /// @param marginWeight 可信度中候选差距的权重
+  /// @param minFallbackCoverage 候选回退所需的最低覆盖率
+  /// @param minFallbackTextScore 候选回退所需的最低文本得分
   const BroadcastMatchConfig({
     this.topK = 32,
     this.maxSpan = 4,
@@ -66,6 +68,8 @@ class BroadcastMatchConfig {
     this.precisionBand = 0.05,
     this.precisionWeight = 0.7,
     this.marginWeight = 0.3,
+    this.minFallbackCoverage = 0.4,
+    this.minFallbackTextScore = 0.35,
   });
 
   /// 参与精排的候选数。
@@ -97,6 +101,12 @@ class BroadcastMatchConfig {
 
   /// 可信度中候选差距权重。
   final double marginWeight;
+
+  /// 候选回退的最低覆盖率：解释比例不够、但仍能覆盖大部分候选原文时的兜底门槛。
+  final double minFallbackCoverage;
+
+  /// 候选回退的最低文本得分。
+  final double minFallbackTextScore;
 }
 
 /// 一次匹配的完整结果。
@@ -255,32 +265,53 @@ class QuranMatchService {
             candidate.alignment.matchCount + candidate.alignment.nearCount >= config.minContentWords)
           candidate,
     ];
+    // 候选裁决：优先在「解释比例达标」的候选里选；若一个都没有，但存在
+    // 「覆盖率与文本得分都不错」的候选，就退化为**候选展示**而不是直接判未匹配。
+    //
+    // 真机实测动机：诵读者念 67:4 时，转写里混入库外词使解释比例掉到 0.54（低于 0.6），
+    // 但该候选覆盖率已达 0.80 —— 内容确实在库里，旧逻辑却把经文栏清空，
+    // 用户看到的是「未匹配」远多于实际未匹配量。候选状态会明确标注未确认，
+    // 不违反「低可信时不得随便确认经文」。
+    _Candidate best;
+    var fallbackCandidate = false;
     if (viable.isEmpty) {
-      final best = candidates.reduce(
-        (a, b) => b.sortScore < a.sortScore ? b : a,
-      );
-      return _reject(
-        asrText,
-        '没有任何候选能解释这段转写（最高解释比例 '
-        '${best.precision.toStringAsFixed(2)}、文本得分 ${best.match.textScore.toStringAsFixed(2)}）',
-        metrics: _metricsOf(best, asrWords),
-        candidateRef: best.ref,
-        textScore: best.match.textScore,
-        acousticScore: best.match.acousticScore,
-        precision: best.precision,
-        coverage: best.coverage,
-        confidence: 0,
-        margin: null,
-      );
+      final fallback = <_Candidate>[
+        for (final candidate in candidates)
+          if (candidate.coverage >= config.minFallbackCoverage &&
+              candidate.match.textScore >= config.minFallbackTextScore &&
+              candidate.alignment.matchCount + candidate.alignment.nearCount >=
+                  config.minContentWords)
+            candidate,
+      ]..sort((a, b) => b.coverage.compareTo(a.coverage));
+      if (fallback.isEmpty) {
+        final weakest = candidates.reduce((a, b) => b.sortScore < a.sortScore ? b : a);
+        return _reject(
+          asrText,
+          '没有任何候选能解释这段转写（最高解释比例 '
+          '${weakest.precision.toStringAsFixed(2)}、文本得分 '
+          '${weakest.match.textScore.toStringAsFixed(2)}、覆盖率 '
+          '${weakest.coverage.toStringAsFixed(2)}）',
+          metrics: _metricsOf(weakest, asrWords),
+          candidateRef: weakest.ref,
+          textScore: weakest.match.textScore,
+          acousticScore: weakest.match.acousticScore,
+          precision: weakest.precision,
+          coverage: weakest.coverage,
+          confidence: 0,
+          margin: null,
+        );
+      }
+      best = fallback.first;
+      fallbackCandidate = true;
+    } else {
+      viable.sort((a, b) {
+        final bandA = (a.precision / config.precisionBand).round();
+        final bandB = (b.precision / config.precisionBand).round();
+        if (bandA != bandB) return bandB.compareTo(bandA);
+        return a.sortScore.compareTo(b.sortScore);
+      });
+      best = viable.first;
     }
-
-    viable.sort((a, b) {
-      final bandA = (a.precision / config.precisionBand).round();
-      final bandB = (b.precision / config.precisionBand).round();
-      if (bandA != bandB) return bandB.compareTo(bandA);
-      return a.sortScore.compareTo(b.sortScore);
-    });
-    final best = viable.first;
 
     // 候选差距：与「其它引用」中排序分最接近者的距离；只有唯一候选时视为无冲突。
     double? margin;
@@ -319,8 +350,11 @@ class QuranMatchService {
         : (wholeVerses == 0 ? RecordScope.partialVerse : RecordScope.mixed);
 
     // 确认条件：解释比例、覆盖率与综合可信度都要过线；否则只作为候选展示。
+    // 候选回退路径一律不确认（它是「内容像在库里但证据不足」的兜底展示）。
     final confident =
-        best.coverage >= config.minCoverage && confidence >= config.minConfidence;
+        !fallbackCandidate &&
+        best.coverage >= config.minCoverage &&
+        confidence >= config.minConfidence;
     return BroadcastMatchOutcome(
       asrText: asrText,
       status: confident
@@ -338,6 +372,10 @@ class QuranMatchService {
       margin: margin,
       rejectionReason: confident
           ? null
+          : fallbackCandidate
+          ? '候选未确认（解释比例 ${best.precision.toStringAsFixed(2)} 低于 '
+                '${config.minPrecision.toStringAsFixed(2)}，但覆盖率 '
+                '${best.coverage.toStringAsFixed(2)}）'
           : '证据不足以确认（覆盖率 ${best.coverage.toStringAsFixed(2)}、'
                 '可信度 ${confidence.toStringAsFixed(2)}）',
     );

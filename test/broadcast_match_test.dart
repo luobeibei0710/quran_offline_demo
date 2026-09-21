@@ -119,6 +119,25 @@ void main() {
       expect(outcome.matches.single.label, contains('词'));
     });
 
+    test('解释比例偏低但覆盖率足够时展示候选经文，而不是清空为未匹配', () async {
+      // 真机实测动机：诵读者念某节时转写里混入库外词，解释比例掉到门槛以下，
+      // 但该节本身被完整覆盖。旧逻辑直接判未匹配并清空经文栏，用户看到大量
+      // 「未匹配」，而内容其实在库里。
+      final tokens = <int>[
+        ...tokensOf(112, 1, 1),
+        // 库外词（词表内但三章经文不含）：制造「转写多出词」的局面。
+        1015, 1020, 1022, 1023, 1015, 1020, 1022, 1023,
+      ];
+      final outcome = await matchTokens(tokens);
+      expect(outcome.status, MatchStatus.candidate);
+      expect(outcome.matches, isNotEmpty, reason: '有覆盖率支撑时应展示候选经文');
+      expect(outcome.matches.single.ref, '112:1');
+      expect(outcome.matches.single.isWholeVerse, isTrue);
+      expect(outcome.rejectionReason, contains('候选未确认'));
+      expect(outcome.precision, lessThan(0.6));
+      expect(outcome.coverage, greaterThanOrEqualTo(0.9));
+    });
+
     test('67:1 的章首太斯米被视为该节内容的一部分，而不是额外一节', () async {
       final outcome = await matchTokens(tokensOf(67, 1, 1));
       expect(outcome.matches, hasLength(1));
