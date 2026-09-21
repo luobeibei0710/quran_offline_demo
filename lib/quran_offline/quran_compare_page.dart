@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import 'reference_text.dart';
 import 'word_alignment.dart';
+import 'word_error_rate.dart';
 
 /// 原文与转写的逐词比对页。
 class QuranComparePage extends StatefulWidget {
@@ -22,11 +23,7 @@ class QuranComparePage extends StatefulWidget {
   ///
   /// @param hypothesisWords 端侧转写词序列
   /// @param referenceLoader 原文加载实现，默认 [ReferenceText.load]（测试可注入）
-  const QuranComparePage({
-    super.key,
-    required this.hypothesisWords,
-    this.referenceLoader,
-  });
+  const QuranComparePage({super.key, required this.hypothesisWords, this.referenceLoader});
 
   /// 端侧转写词序列。
   final List<String> hypothesisWords;
@@ -72,12 +69,14 @@ class _QuranComparePageState extends State<QuranComparePage> {
         _result = result;
         _loading = false;
       });
-      debugPrint('[QuranCompare] 原文 ${reference.words.length} 词 / 转写 '
-          '${widget.hypothesisWords.length} 词 → F1=${result.f1.toStringAsFixed(3)} '
-          '覆盖率=${result.coverage.toStringAsFixed(3)} '
-          '准确率=${result.precision.toStringAsFixed(3)} '
-          '一致=${result.matchCount} 近似=${result.nearCount} 错配=${result.mismatchCount} '
-          '缺失=${result.missingCount} 多余=${result.extraCount} 结论=${result.verdict}');
+      debugPrint(
+        '[QuranCompare] 原文 ${reference.words.length} 词 / 转写 '
+        '${widget.hypothesisWords.length} 词 → F1=${result.f1.toStringAsFixed(3)} '
+        '覆盖率=${result.coverage.toStringAsFixed(3)} '
+        '准确率=${result.precision.toStringAsFixed(3)} '
+        '一致=${result.matchCount} 近似=${result.nearCount} 错配=${result.mismatchCount} '
+        '缺失=${result.missingCount} 多余=${result.extraCount} 结论=${result.verdict}',
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -160,6 +159,7 @@ class _QuranComparePageState extends State<QuranComparePage> {
 
   /// 顶部指标区：结论、F1 / 覆盖率 / 准确率 / 平均相似度、各状态词数、来源。
   Widget _buildSummary(AlignmentResult result, ReferenceText reference) {
+    final strict = WordErrorRate.compare(reference.words, widget.hypothesisWords);
     final verdictColor = switch (result.verdict) {
       '优秀' => Colors.green.shade700,
       '良好' => Colors.lightGreen.shade700,
@@ -183,12 +183,18 @@ class _QuranComparePageState extends State<QuranComparePage> {
                 ),
                 child: Text(
                   result.verdict,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              Text('F1 ${result.f1.toStringAsFixed(3)}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                'F1 ${result.f1.toStringAsFixed(3)}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -199,6 +205,12 @@ class _QuranComparePageState extends State<QuranComparePage> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '严格词错误率 WER ${strict.rate.isFinite ? strict.rate.toStringAsFixed(3) : "∞"}'
+            ' · 上方 F1 为容错词匹配分（近似词计半分）',
+            style: const TextStyle(fontSize: 11, color: Colors.black54),
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -261,8 +273,11 @@ class _QuranComparePageState extends State<QuranComparePage> {
   Widget _buildLegend() {
     final items = <(String, WordStatus)>[
       ('一致 ≥${WordAlignment.matchThreshold.toStringAsFixed(2)}', WordStatus.match),
-      ('近似 ${WordAlignment.nearThreshold.toStringAsFixed(2)}~'
-          '${WordAlignment.matchThreshold.toStringAsFixed(2)}', WordStatus.near),
+      (
+        '近似 ${WordAlignment.nearThreshold.toStringAsFixed(2)}~'
+            '${WordAlignment.matchThreshold.toStringAsFixed(2)}',
+        WordStatus.near,
+      ),
       ('错配 <${WordAlignment.nearThreshold.toStringAsFixed(2)}', WordStatus.mismatch),
       ('原文缺失', WordStatus.missing),
       ('转写多余', WordStatus.extra),
@@ -302,11 +317,17 @@ class _QuranComparePageState extends State<QuranComparePage> {
         children: const [
           SizedBox(width: 32),
           Expanded(
-            child: Text('原文', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+            child: Text(
+              '原文',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
           ),
           SizedBox(width: 6),
           Expanded(
-            child: Text('转写', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+            child: Text(
+              '转写',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
           ),
         ],
       ),
@@ -335,7 +356,10 @@ class _QuranComparePageState extends State<QuranComparePage> {
         children: [
           SizedBox(
             width: 32,
-            child: Text('${index + 1}', style: const TextStyle(fontSize: 10, color: Colors.black26)),
+            child: Text(
+              '${index + 1}',
+              style: const TextStyle(fontSize: 10, color: Colors.black26),
+            ),
           ),
           Expanded(child: _buildCell(row.reference)),
           const SizedBox(width: 6),
@@ -357,26 +381,26 @@ class _QuranComparePageState extends State<QuranComparePage> {
   }
 
   Color _backgroundOf(WordStatus status) => switch (status) {
-        WordStatus.match => const Color(0xFFE8F5E9),
-        WordStatus.near => const Color(0xFFFFF8E1),
-        WordStatus.mismatch => const Color(0xFFFFEBEE),
-        WordStatus.missing => const Color(0xFFF0F0F0),
-        WordStatus.extra => const Color(0xFFFFF3E0),
-      };
+    WordStatus.match => const Color(0xFFE8F5E9),
+    WordStatus.near => const Color(0xFFFFF8E1),
+    WordStatus.mismatch => const Color(0xFFFFEBEE),
+    WordStatus.missing => const Color(0xFFF0F0F0),
+    WordStatus.extra => const Color(0xFFFFF3E0),
+  };
 
   Color _borderOf(WordStatus status) => switch (status) {
-        WordStatus.match => const Color(0xFFA5D6A7),
-        WordStatus.near => const Color(0xFFFFE082),
-        WordStatus.mismatch => const Color(0xFFEF9A9A),
-        WordStatus.missing => const Color(0xFFBDBDBD),
-        WordStatus.extra => const Color(0xFFFFCC80),
-      };
+    WordStatus.match => const Color(0xFFA5D6A7),
+    WordStatus.near => const Color(0xFFFFE082),
+    WordStatus.mismatch => const Color(0xFFEF9A9A),
+    WordStatus.missing => const Color(0xFFBDBDBD),
+    WordStatus.extra => const Color(0xFFFFCC80),
+  };
 
   Color _foregroundOf(WordStatus status) => switch (status) {
-        WordStatus.match => const Color(0xFF1B5E20),
-        WordStatus.near => const Color(0xFF8D6E00),
-        WordStatus.mismatch => const Color(0xFFB71C1C),
-        WordStatus.missing => const Color(0xFF616161),
-        WordStatus.extra => const Color(0xFFE65100),
-      };
+    WordStatus.match => const Color(0xFF1B5E20),
+    WordStatus.near => const Color(0xFF8D6E00),
+    WordStatus.mismatch => const Color(0xFFB71C1C),
+    WordStatus.missing => const Color(0xFF616161),
+    WordStatus.extra => const Color(0xFFE65100),
+  };
 }

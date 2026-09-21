@@ -39,11 +39,7 @@ void main() {
       final assets = await loadFixtureAssets();
       // 证据对齐到 1:1 与 1:2 的连读序列 [1, 2, 3]
       final runner = ScriptedOrtRunner(
-        buildAlignedEvidence(<int>[
-          FixtureTokens.bism,
-          FixtureTokens.allah,
-          FixtureTokens.alhamd,
-        ]),
+        buildAlignedEvidence(<int>[FixtureTokens.bism, FixtureTokens.allah, FixtureTokens.alhamd]),
       );
       final recognizer = QuranRecognizer(assets: assets, runner: runner);
 
@@ -370,6 +366,25 @@ void main() {
       await session.dispose();
     });
 
+    test('裁窗不得超过60%，也不得为了下限吞掉未读音频', () async {
+      for (final overlap in [0.0, 2.2]) {
+        final (session, events, _) = await startSessionWithEvents(
+          QuranStreamingConfig(
+            triggerSeconds: 0.05,
+            minWindowSeconds: 0.05,
+            finalSilenceSeconds: 100,
+            stableRounds: 1,
+            windowOverlapSeconds: overlap,
+          ),
+        );
+        await session.feed(buildSpeechLikeSamples(3));
+        await pumpEventQueue();
+        // 内容结束于2.4s；保留重叠后分别允许裁1.8s（60%上限）与0.2s。
+        expect(events.single.advancedSeconds, closeTo(overlap == 0 ? 1.8 : 0.2, 0.02));
+        await session.dispose();
+      }
+    });
+
     test('关闭窗口推进时不裁剪音频', () async {
       final (session, events, _) = await startSessionWithEvents(
         const QuranStreamingConfig(
@@ -482,7 +497,7 @@ void main() {
 /// @param config 流式配置
 /// @return `(会话, 事件列表, 脚本化推理桥)`
 Future<(QuranStreamingSession, List<QuranRecognitionEvent>, ScriptedOrtRunner)>
-    startSessionWithEvents(QuranStreamingConfig config) async {
+startSessionWithEvents(QuranStreamingConfig config) async {
   final assets = await loadFixtureAssets();
   final runner = ScriptedOrtRunner(
     buildAlignedEvidence(<int>[FixtureTokens.bism, FixtureTokens.allah]),

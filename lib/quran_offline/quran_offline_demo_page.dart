@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/services.dart';
 import 'ctc_scorer.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -19,6 +20,7 @@ import 'package:record/record.dart';
 
 import 'corpus_verify_page.dart';
 import 'ort_runner.dart';
+import 'offline_corpus_check.dart';
 import 'quran_assets.dart';
 import 'quran_compare_page.dart';
 import 'quran_matcher.dart';
@@ -104,6 +106,15 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     final time = DateTime.now().toIso8601String().substring(11, 19);
     // 同时输出到 logcat，便于真机联调时用 adb 直接观察
     debugPrint('[QuranDemo] $message');
+    // iOS release 的 Dart 日志不一定进入 devicectl --console；仅验收构建转发原生日志。
+    if (const bool.fromEnvironment('quran_headless_corpus') &&
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      unawaited(const MethodChannel('quran_offline/ort')
+          .invokeMethod<void>('acceptanceLog', message)
+          .catchError((Object error) {
+        debugPrint('Acceptance log forwarding failed: $error');
+      }));
+    }
     setState(() {
       _logs.insert(0, '[$time] $message');
       if (_logs.length > 60) _logs.removeLast();
@@ -437,6 +448,14 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
       }
     }
     _log('内置样本验证完成：命中 $hits/${_builtinSamples.length}');
+    if (const bool.fromEnvironment('quran_headless_corpus')) {
+      try {
+        await checkOfflineCorpus(recognizer, log: _log);
+      } catch (error) {
+        _log('OFFLINE_FAILED $error');
+      }
+      return;
+    }
     if (_autoCorpus) {
       await Future<void>.delayed(const Duration(seconds: 1));
       _log('联调模式：自动进入语料验证（灌音 + 原文比对）');
@@ -794,4 +813,3 @@ class _QuranOfflineDemoPageState extends State<QuranOfflineDemoPage> {
     );
   }
 }
-

@@ -18,6 +18,7 @@ import 'ort_runner.dart';
 import 'quran_assets.dart';
 import 'quran_matcher.dart';
 import 'quran_word_progress.dart';
+import 'timed_transcript.dart';
 
 /// 一次识别的输出事件。
 class QuranRecognitionEvent {
@@ -33,6 +34,7 @@ class QuranRecognitionEvent {
     this.committedSequence = const <String>[],
     this.justCommitted = false,
     this.advancedSeconds = 0,
+    this.transcriptWords = const <String>[],
   });
 
   /// 匹配结果（含冠军与候选）。
@@ -72,6 +74,9 @@ class QuranRecognitionEvent {
   ///
   /// 便于观察「识别随进度前移」：窗口不再一直堆到 15 s，而是裁掉已读部分。
   final double advancedSeconds;
+
+  /// 按音频时间合并的实际 ASR 词；不查经文、不使用期望章节。
+  final List<String> transcriptWords;
 
   /// 最近一次确认的章节；尚未提交过时返回 null。
   String? get committedRef => committedSequence.isEmpty ? null : committedSequence.last;
@@ -179,18 +184,28 @@ class QuranStreamingConfig {
 class QuranRecognizer {
   /// 构造识别器。
   ///
-  /// @param assets 已加载的数据资产
+  /// @param assets 已加载的数据资产（提供词表与 blank id）
   /// @param runner 推理桥实现
   /// @param config 流式配置
+  /// @param index 匹配所用的经文索引；省略时使用 [assets] 指向的旧经文库。
+  ///   广播功能传入独立新库索引，匹配与上下文都不会查询旧库。
   QuranRecognizer({
     required this.assets,
     required this.runner,
     this.config = const QuranStreamingConfig(),
-  })  : decoder = TextCtcDecoder(assets.vocab, blankId: assets.blankId),
-        matcher = QuranMatcher(assets);
+    VerseIndex? index,
+  }) : index = index ?? assets,
+       decoder = TextCtcDecoder(assets.vocab, blankId: assets.blankId),
+       matcher = QuranMatcher(index ?? assets);
 
-  /// 数据资产。
+  /// 数据资产（词表、blank id 与旧经文库）。
   final QuranAssets assets;
+
+  /// 本条链路实际检索的经文索引。
+  ///
+  /// 旧功能等于 [assets]；广播功能等于独立三章新库。匹配与上下文查询一律
+  /// 走本字段，保证不会出现「新库展示、旧库检索」或未匹配时的隐式回退。
+  final VerseIndex index;
 
   /// 推理桥。
   final OrtRunner runner;
@@ -240,7 +255,7 @@ class QuranStreamingSession {
   /// @param recognizer 识别器
   /// @param assumeSpeech 强制按「已知是朗读」处理（覆盖配置里的同名开关）
   QuranStreamingSession(this._recognizer, {bool assumeSpeech = false})
-      : _assumeSpeech = assumeSpeech || _recognizer.config.assumeSpeech;
+    : _assumeSpeech = assumeSpeech || _recognizer.config.assumeSpeech;
 
   final QuranRecognizer _recognizer;
 
@@ -257,6 +272,8 @@ class QuranStreamingSession {
   bool _busy = false;
   String? _lastStableRef;
   int _stableCount = 0;
+  int _totalSamples = 0;
+  final TimedTranscript _transcript = TimedTranscript();
 
   /// 会话内「最安静的窗口本底」，用于自适应语音门控。
   ///
@@ -292,6 +309,7 @@ class QuranStreamingSession {
   /// @param chunk 音频分块
   Future<void> feed(Float32List chunk) async {
     if (!_running || chunk.isEmpty) return;
+    _totalSamples += chunk.length;
 
     final merged = Float32List(_accumulated.length + chunk.length)
       ..setAll(0, _accumulated)
@@ -300,7 +318,9 @@ class QuranStreamingSession {
 
     final chunkSeconds = chunk.length / QuranRecognizer.sampleRate;
     _secondsSinceTrigger += chunkSeconds;
-    _silenceSeconds = _rms(chunk) < _recognizer.config.silenceRmsThreshold ? _silenceSeconds + chunkSeconds : 0;
+    _silenceSeconds = _rms(chunk) < _recognizer.config.silenceRmsThreshold
+        ? _silenceSeconds + chunkSeconds
+        : 0;
 
     if (_silenceSeconds >= _recognizer.config.finalSilenceSeconds) {
       await _flush(finalEvent: true);
@@ -327,6 +347,8 @@ class QuranStreamingSession {
   /// 重置会话状态（开始新一次诵读）：清空音频缓冲、稳定计数与已确认序列。
   void reset() {
     _resetBuffers();
+    _totalSamples = 0;
+    _transcript.clear();
     _committedRefs.clear();
     _lastCommittedRef = null;
   }
@@ -389,18 +411,15 @@ class QuranStreamingSession {
   /// @param frames 证据总帧数
   /// @param windowSamples 本次识别窗口的采样点数
   /// @return 实际裁掉的时长（秒）；未裁剪时为 0
-  double _advanceWindow({
-    required int endFrame,
-    required int frames,
-    required int windowSamples,
-  }) {
+  double _advanceWindow({required int endFrame, required int frames, required int windowSamples}) {
     if (endFrame < 0 || frames <= 0 || windowSamples <= 0) return 0;
     final samplesPerFrame = windowSamples / frames;
-    final keep = (endFrame + 1) * samplesPerFrame -
+    final keep =
+        (endFrame + 1) * samplesPerFrame -
         _recognizer.config.windowOverlapSeconds * QuranRecognizer.sampleRate;
     if (keep <= 0) return 0;
     // 单次最多裁掉 60%：即使已读位置判定有偏差，也不至于把窗口内容裁光
-    final bounded = math.max(keep, windowSamples * 0.4);
+    final bounded = math.min(keep, windowSamples * 0.6);
     final trimAt = _accumulated.length - windowSamples + bounded.round();
     if (trimAt <= 0 || trimAt >= _accumulated.length) return 0;
     _accumulated = _accumulated.sublist(trimAt);
@@ -426,8 +445,21 @@ class QuranStreamingSession {
           ? Float32List.sublistView(_accumulated, _accumulated.length - windowSamples)
           : _accumulated;
 
+      final audioEndSample = _totalSamples;
       final evidence = await _recognizer.runner.run(audio);
-      final decoded = _recognizer.decoder.decode(evidence.logprobs, evidence.timeSteps, evidence.vocabSize);
+      final decoded = _recognizer.decoder.decode(
+        evidence.logprobs,
+        evidence.timeSteps,
+        evidence.vocabSize,
+      );
+      _transcript.update(
+        decoded: decoded,
+        vocab: _recognizer.assets.vocab,
+        frames: evidence.timeSteps,
+        windowStart: (audioEndSample - audio.length) / QuranRecognizer.sampleRate,
+        windowEnd: audioEndSample / QuranRecognizer.sampleRate,
+        isFinal: finalEvent,
+      );
       final match = _recognizer.matcher.match(
         evidence,
         decoded.text,
@@ -455,7 +487,7 @@ class QuranStreamingSession {
       QuranReadProgress? readProgress;
       if (champion != null) {
         final (spanWords, groups) = QuranWordProgress.alignedWords(
-          _recognizer.assets,
+          _recognizer.index,
           champion.surah,
           champion.ayahStart,
           champion.ayahEnd,
@@ -464,7 +496,7 @@ class QuranStreamingSession {
         readProgress = QuranWordProgress.estimateReadProgress(evidence, groups);
         readWords = readProgress.readWords;
         // 提词器前瞻：附带下一节，保证界面始终存在「未读」区域可供对比
-        final nextVerse = _recognizer.assets.verse(champion.surah, champion.ayahEnd + 1);
+        final nextVerse = _recognizer.index.verse(champion.surah, champion.ayahEnd + 1);
         words = nextVerse == null ? spanWords : [...spanWords, ...nextVerse.words];
       }
 
@@ -510,6 +542,7 @@ class QuranStreamingSession {
           committedSequence: List<String>.unmodifiable(_committedRefs),
           justCommitted: justCommitted,
           advancedSeconds: advancedSeconds,
+          transcriptWords: List<String>.unmodifiable(_transcript.words),
         ),
       );
     } catch (error, stackTrace) {

@@ -182,12 +182,12 @@ class QuranWordProgress {
 
   /// 取某跨度内所有经节的词（用于提词器逐词显示）。
   ///
-  /// @param assets 数据资产
+  /// @param assets 经文索引（旧库或广播新库）
   /// @param surah 章号
   /// @param ayahStart 起始节
   /// @param ayahEnd 结束节（含）
   /// @return 词列表；数据缺失时返回空列表
-  static List<String> wordsOfSpan(QuranAssets assets, int surah, int ayahStart, int ayahEnd) {
+  static List<String> wordsOfSpan(VerseIndex assets, int surah, int ayahStart, int ayahEnd) {
     final words = <String>[];
     for (var ayah = ayahStart; ayah <= ayahEnd; ayah++) {
       final verse = assets.verse(surah, ayah);
@@ -202,13 +202,13 @@ class QuranWordProgress {
   /// 当 token 词组数与经文词数不一致时（例如 token 表带太斯米而经文不含），
   /// 以较少的一方为准截断，保证高亮不错位。
   ///
-  /// @param assets 数据资产
+  /// @param assets 经文索引（旧库或广播新库）
   /// @param surah 章号
   /// @param ayahStart 起始节
   /// @param ayahEnd 结束节（含）
   /// @return `(经文词列表, token 词组)`，长度一致
   static (List<String>, List<List<int>>) alignedWords(
-    QuranAssets assets,
+    VerseIndex assets,
     int surah,
     int ayahStart,
     int ayahEnd,

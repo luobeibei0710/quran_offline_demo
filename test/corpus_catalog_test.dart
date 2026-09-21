@@ -14,8 +14,19 @@ void main() {
     test('从 manifest.json 列出内置语料，原文按章节区间取', () async {
       final bundle = FakeAssetBundle(<String, String>{
         CorpusCatalog.manifestAsset: jsonEncode(<Map<String, Object>>[
-          <String, Object>{'file': 'corpus_036_001_005.wav', 'surah': 36, 'ayahStart': 1, 'ayahEnd': 5},
-          <String, Object>{'file': 'corpus_112_001_001.wav', 'surah': 112, 'ayahStart': 1, 'ayahEnd': 1},
+          <String, Object>{
+            'file': 'corpus_036_001_005.wav',
+            'surah': 36,
+            'ayahStart': 1,
+            'ayahEnd': 5,
+            'includesBismillah': false,
+          },
+          <String, Object>{
+            'file': 'corpus_112_001_001.wav',
+            'surah': 112,
+            'ayahStart': 1,
+            'ayahEnd': 1,
+          },
         ]),
       });
 
@@ -25,10 +36,11 @@ void main() {
       );
 
       expect(items, hasLength(2));
+      expect(items.first.includesBismillah, isFalse);
+      expect(items.last.includesBismillah, isTrue);
       expect(items.first.audio.assetKey, '${CorpusCatalog.assetDir}corpus_036_001_005.wav');
       expect(items.first.title, '内置语料 · 36:1-5');
-      expect(items.first.expectedRefs,
-          <String>['36:1', '36:2', '36:3', '36:4', '36:5']);
+      expect(items.first.expectedRefs, <String>['36:1', '36:2', '36:3', '36:4', '36:5']);
       expect(items.last.expectedRefs, <String>['112:1']);
       expect(items.last.title, '内置语料 · 112:1');
     });
@@ -58,9 +70,7 @@ void main() {
         '$deviceDir/corpus_078_001_010.wav',
         '$deviceDir/坏文件.wav',
       ];
-      final texts = <String, String>{
-        '$deviceDir/我的朗读.txt': 'قل هو الله احد',
-      };
+      final texts = <String, String>{'$deviceDir/我的朗读.txt': 'قل هو الله احد'};
 
       final items = await CorpusCatalog.load(
         bundle: FakeAssetBundle(<String, String>{}),
@@ -103,6 +113,8 @@ void main() {
       expect(variants.last.words, <String>['يس']);
       expect(variants.last.rawText, 'يس');
       expect(variants.last.source, contains('去掉太斯米前缀'));
+      expect(CorpusCatalog.fixedReference(full, includesBismillah: true).words, full.words);
+      expect(CorpusCatalog.fixedReference(full, includesBismillah: false).words, ['يس']);
     });
 
     test('不含太斯米前缀（或本身就是太斯米）时只有一条', () {

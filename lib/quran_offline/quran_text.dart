@@ -1,8 +1,10 @@
 /// 古兰经文本工具：阿拉伯语归一化与相似度计算。
 ///
-/// 与 Tilawa 的 `normalizer.ts` + `levenshtein.ts` 保持等价语义，
-/// 保证 Dart 侧召回结果与参考实现一致（已用 Python 基准对照验证）。
+/// 基本字母沿用 Tilawa 的 `normalizer.ts` + `levenshtein.ts` 语义；额外兼容
+/// 外部文本中的 Arabic Presentation Forms-A/B，避免旧式字形编码破坏召回。
 library;
+
+import 'arabic_presentation_forms.dart';
 
 /// 阿拉伯语文本归一化与相似度。
 class QuranText {
@@ -25,19 +27,25 @@ class QuranText {
 
   /// 归一化阿拉伯语文本。
   ///
-  /// 处理顺序与 Tilawa 一致：去 BOM → 去变音符号/Tatweel → 字母变体统一 →
-  /// 压缩空白。
+  /// 处理顺序：先把外部输入中的 Arabic Presentation Forms-A/B 兼容分解为
+  /// 逻辑字符，再沿用 Tilawa 语义去 BOM、去变音符号/Tatweel、统一字母变体，
+  /// 最后压缩空白。该兼容步骤只反向展开旧式字形编码，不做显示用 reshape。
   ///
   /// @param text 原始文本（可能含音标）
   /// @return 归一化后的文本
   static String normalize(String text) {
-    final stripped = text.replaceAll(_strippable, '');
+    final expanded = expandArabicPresentationForms(text);
+    final stripped = expanded.replaceAll(_strippable, '');
     final buffer = StringBuffer();
     for (final codePoint in stripped.runes) {
       final char = String.fromCharCode(codePoint);
       buffer.write(_letterMap[char] ?? char);
     }
-    return buffer.toString().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).join(' ');
+    return buffer
+        .toString()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .join(' ');
   }
 
   /// 归一化后的字符级编辑相似度（0..1，1 表示完全相同）。
@@ -68,7 +76,9 @@ class QuranText {
       current = swap;
     }
     final distance = previous[bUnits.length];
-    final longest = aUnits.length > bUnits.length ? aUnits.length : bUnits.length;
+    final longest = aUnits.length > bUnits.length
+        ? aUnits.length
+        : bUnits.length;
     return 1.0 - distance / longest;
   }
 
@@ -112,6 +122,7 @@ class QuranText {
   /// @param verseText 经文文本（已归一化）
   /// @return 0..1 的文本得分
   static double textScore(String decoded, String verseText) {
-    return 0.55 * ratio(decoded, verseText) + 0.45 * fragmentScore(decoded, verseText);
+    return 0.55 * ratio(decoded, verseText) +
+        0.45 * fragmentScore(decoded, verseText);
   }
 }

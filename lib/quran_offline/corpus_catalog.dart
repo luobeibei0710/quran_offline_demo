@@ -48,19 +48,13 @@ class CorpusReference {
   /// @param surah 章号
   /// @param ayahStart 起始节
   /// @param ayahEnd 结束节（含）
-  const CorpusReference.range({
-    required this.surah,
-    required this.ayahStart,
-    required this.ayahEnd,
-  }) : textPaths = const <String>[];
+  const CorpusReference.range({required this.surah, required this.ayahStart, required this.ayahEnd})
+    : textPaths = const <String>[];
 
   /// 设备文本文件（自定义语料：原文由用户提供）。
   ///
   /// @param textPaths 候选路径
-  const CorpusReference.textFile(this.textPaths)
-      : surah = null,
-        ayahStart = 0,
-        ayahEnd = 0;
+  const CorpusReference.textFile(this.textPaths) : surah = null, ayahStart = 0, ayahEnd = 0;
 
   /// 章号（自定义文本来源时为 null）。
   final int? surah;
@@ -101,6 +95,7 @@ class CorpusItem {
     required this.title,
     required this.audio,
     required this.reference,
+    this.includesBismillah = true,
   });
 
   /// 唯一标识。
@@ -114,6 +109,9 @@ class CorpusItem {
 
   /// 原文来源。
   final CorpusReference reference;
+
+  /// 由语料标注决定，不能按识别结果择优。
+  final bool includesBismillah;
 
   /// 期望章节（区间来源时非空，用于命中判定）。
   List<String> get expectedRefs => reference.expectedRefs;
@@ -134,8 +132,10 @@ class CorpusCatalog {
   ];
 
   /// 文件名解析正则：`corpus_SSS_AAA_BBB.wav`。
-  static final RegExp _fileNamePattern =
-      RegExp(r'^corpus_(\d{3})_(\d{3})_(\d{3})\.wav$', caseSensitive: false);
+  static final RegExp _fileNamePattern = RegExp(
+    r'^corpus_(\d{3})_(\d{3})_(\d{3})\.wav$',
+    caseSensitive: false,
+  );
 
   /// 加载清单：内置语料 + 设备语料。
   ///
@@ -172,10 +172,12 @@ class CorpusCatalog {
         items.add(
           CorpusItem(
             id: file,
-            title: '内置语料 · '
+            title:
+                '内置语料 · '
                 '${CorpusReference.range(surah: surah, ayahStart: start, ayahEnd: end).label}',
             audio: CorpusAudioSource.asset('$assetDir$file'),
             reference: CorpusReference.range(surah: surah, ayahStart: start, ayahEnd: end),
+            includesBismillah: entry['includesBismillah'] != false,
           ),
         );
       }
@@ -203,12 +205,8 @@ class CorpusCatalog {
         final reference = text != null && text.trim().isNotEmpty
             ? CorpusReference.textFile(<String>[textPath])
             : (range == null
-                ? null
-                : CorpusReference.range(
-                    surah: range.$1,
-                    ayahStart: range.$2,
-                    ayahEnd: range.$3,
-                  ));
+                  ? null
+                  : CorpusReference.range(surah: range.$1, ayahStart: range.$2, ayahEnd: range.$3));
         if (reference == null) continue; // 既没有原文也没有可解析的区间：跳过
         items.add(
           CorpusItem(
@@ -230,21 +228,22 @@ class CorpusCatalog {
   static (int, int, int)? parseRangeFromFileName(String fileName) {
     final match = _fileNamePattern.firstMatch(fileName);
     if (match == null) return null;
-    return (
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3)!),
-    );
+    return (int.parse(match.group(1)!), int.parse(match.group(2)!), int.parse(match.group(3)!));
   }
 
   /// 太斯米（归一化后的词形，与经文库 `text_clean` 一致）。
   static const List<String> bismillahWords = <String>['بسم', 'الله', 'الرحمن', 'الرحيم'];
 
+  /// 识别开始前冻结参考，不接收预测结果。
+  static ReferenceText fixedReference(ReferenceText full, {required bool includesBismillah}) =>
+      includesBismillah ? full : referenceVariants(full).last;
+
   /// 语料原文的候选变体：完整原文 + 去掉太斯米前缀的版本。
   ///
   /// 经文库把太斯米并入部分章节的原文（`1:1`、`36:1`、`112:1` 等），而语料音频
   /// 不一定包含太斯米。若只按完整原文比对，会凭空多出 4 个「缺失词」把 F1 压下去；
-  /// 因此给出两个变体，比对时取更贴合音频的那个，并在比对页来源上标明。
+  /// 此方法仅提供两个文本形式，由 [fixedReference] 按事先标注选择，
+  /// 禁止按识别结果最高 F1 事后择优。
   ///
   /// @param full 完整原文
   /// @return 候选原文列表（至少一条；无太斯米前缀时只有一条）
@@ -264,11 +263,7 @@ class CorpusCatalog {
         : trimmedWords.join(' ');
     return <ReferenceText>[
       full,
-      ReferenceText(
-        words: trimmedWords,
-        rawText: trimmedRaw,
-        source: '${full.source}（去掉太斯米前缀）',
-      ),
+      ReferenceText(words: trimmedWords, rawText: trimmedRaw, source: '${full.source}（去掉太斯米前缀）'),
     ];
   }
 

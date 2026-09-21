@@ -114,10 +114,10 @@ class VerseMatchResult {
 class QuranMatcher {
   /// 构造匹配器并建立倒排索引。
   ///
-  /// @param assets 已加载的数据资产
-  QuranMatcher(this.assets) {
-    for (var i = 0; i < assets.verses.length; i++) {
-      final words = assets.verses[i].words;
+  /// @param verseIndex 经文索引（旧库或广播新库），只使用其经文与 token 数据
+  QuranMatcher(this.verseIndex) {
+    for (var i = 0; i < verseIndex.verses.length; i++) {
+      final words = verseIndex.verses[i].words;
       if (words.isEmpty) continue;
       final wordSet = words.toSet();
       _verseWordSets[i] = wordSet;
@@ -127,8 +127,8 @@ class QuranMatcher {
     }
   }
 
-  /// 数据资产。
-  final QuranAssets assets;
+  /// 经文索引（决定在哪个语料库内检索）。
+  final VerseIndex verseIndex;
 
   /// 词 -> 经文下标倒排索引（**全文**分词，不只用首词）。
   ///
@@ -202,7 +202,7 @@ class QuranMatcher {
     final candidates = <MapEntry<int, double>>[];
     if (hitCount.length < 8) {
       // 命中过少（识别文本生僻或含噪声）→ 全量覆盖率扫描
-      for (var i = 0; i < assets.verses.length; i++) {
+      for (var i = 0; i < verseIndex.verses.length; i++) {
         candidates.add(MapEntry(i, _textScoreOf(i, words, decoded)));
       }
     } else {
@@ -242,12 +242,12 @@ class QuranMatcher {
 
   /// 计算某经节对识别文本的召回得分（覆盖率为主、编辑相似度为辅）。
   ///
-  /// @param index 经节下标
+  /// @param verseIndex 经节下标
   /// @param words 识别文本的词集合
   /// @param decoded 识别文本
   /// @return 0..1 的召回得分；完全无词命中时为 0
-  double _textScoreOf(int index, Set<String> words, String decoded) {
-    final verseWords = _verseWordSets[index];
+  double _textScoreOf(int verseIndex, Set<String> words, String decoded) {
+    final verseWords = _verseWordSets[verseIndex];
     if (verseWords == null || verseWords.isEmpty) return 0.0;
     var matched = 0;
     for (final word in words) {
@@ -255,7 +255,7 @@ class QuranMatcher {
     }
     final coverage = matched / words.length;
     if (coverage == 0.0) return 0.0;
-    final edit = QuranText.textScore(decoded, assets.verses[index].normalizedText);
+    final edit = QuranText.textScore(decoded, this.verseIndex.verses[verseIndex].normalizedText);
     return coverage * 0.85 + edit * 0.15;
   }
 
@@ -286,10 +286,10 @@ class QuranMatcher {
 
     final scored = <VerseMatchCandidate>[];
     for (final entry in recalled.take(topK)) {
-      final verse = assets.verses[entry.key];
+      final verse = verseIndex.verses[entry.key];
       for (var span = 1; span <= maxSpan; span++) {
         final ayahEnd = verse.ayah + span - 1;
-        final tokens = assets.tokensFor(verse.surah, verse.ayah, ayahEnd);
+        final tokens = verseIndex.tokensFor(verse.surah, verse.ayah, ayahEnd);
         if (tokens == null || tokens.isEmpty) continue;
         final acoustic = _scoreTokens(evidence, tokens);
         if (acoustic >= CtcScorer.impossibleScore) continue;
@@ -333,11 +333,11 @@ class QuranMatcher {
   /// @param context 前后各取几节
   /// @return 上下文经文（含当前节）
   List<QuranVerse> surrounding(int surah, int ayah, {int context = 2}) {
-    final list = assets.versesBySurah[surah];
+    final list = verseIndex.versesOfSurah(surah);
     if (list == null) return const [];
     final result = <QuranVerse>[];
     for (var a = ayah - context; a <= ayah + context; a++) {
-      final verse = assets.verse(surah, a);
+      final verse = verseIndex.verse(surah, a);
       if (verse != null) result.add(verse);
     }
     return result;

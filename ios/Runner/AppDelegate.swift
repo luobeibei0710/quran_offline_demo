@@ -29,6 +29,14 @@ import UIKit
     channel.setMethodCallHandler { call, result in
       let bridge = QuranOrtBridge.sharedInstance()
       switch call.method {
+      case "acceptanceLog":
+        guard let message = call.arguments as? String else {
+          result(FlutterError(code: "QURAN_BAD_INPUT", message: "日志格式无效", details: nil))
+          return
+        }
+        NSLog("[QuranDemo] %@", message)
+        result(nil)
+
       case "loadModel":
         guard let args = call.arguments as? [String: Any],
               let assetPath = args["path"] as? String, !assetPath.isEmpty else {

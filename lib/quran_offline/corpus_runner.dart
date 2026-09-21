@@ -29,11 +29,7 @@ class CorpusRunProgress {
   /// @param fedSeconds 已喂入时长（秒）
   /// @param totalSeconds 语料总时长（秒）
   /// @param event 本次喂入触发的最新识别事件（未触发时为 null）
-  const CorpusRunProgress({
-    required this.fedSeconds,
-    required this.totalSeconds,
-    this.event,
-  });
+  const CorpusRunProgress({required this.fedSeconds, required this.totalSeconds, this.event});
 
   /// 已喂入时长（秒）。
   final double fedSeconds;
@@ -62,6 +58,7 @@ class CorpusRunResult {
     required this.eventCount,
     required this.elapsed,
     required this.advancedSeconds,
+    this.isOffline = false,
   });
 
   /// 期望章节（语料原文对应区间内的节，有序；自定义原文时为空）。
@@ -70,7 +67,7 @@ class CorpusRunResult {
   /// 转写稿来源章节：稳定命中且全局去重（识别顺序）。
   final List<String> transcriptRefs;
 
-  /// 转写稿词序列（[transcriptRefs] 对应节的标准经文）。
+  /// 离线模式为实际 ASR；流式诊断为 [transcriptRefs] 对应的标准经文重建。
   final List<String> transcriptWords;
 
   /// 逐词 ASR 原始输出（重叠去重后），仅作诊断参考。
@@ -85,7 +82,7 @@ class CorpusRunResult {
   /// 已确认章节序列（末次事件）。
   final List<String> committedRefs;
 
-  /// 产生识别事件的窗口数。
+  /// 流式事件数；[isOffline] 时为离线推理分段数。
   final int eventCount;
 
   /// 灌音耗时（含推理）。
@@ -94,13 +91,20 @@ class CorpusRunResult {
   /// 本轮窗口前移总时长（秒）。
   final double advancedSeconds;
 
+  /// 离线校核使用实际 ASR 转写，不产生流式章节轨迹。
+  final bool isOffline;
+
   /// 期望区间内被识别到的节。
-  List<String> get matchedRefs =>
-      <String>[for (final ref in expectedRefs) if (seenRefs.contains(ref)) ref];
+  List<String> get matchedRefs => <String>[
+    for (final ref in expectedRefs)
+      if (seenRefs.contains(ref)) ref,
+  ];
 
   /// 期望区间内曾稳定命中的节。
-  List<String> get stableMatchedRefs =>
-      <String>[for (final ref in expectedRefs) if (stableRefs.contains(ref)) ref];
+  List<String> get stableMatchedRefs => <String>[
+    for (final ref in expectedRefs)
+      if (stableRefs.contains(ref)) ref,
+  ];
 
   /// 区间内的节是否**全部**识别到（自定义原文时为 null）。
   bool? get hit => expectedRefs.isEmpty ? null : matchedRefs.length == expectedRefs.length;
@@ -216,9 +220,7 @@ class CorpusRunner {
         final end = math.min(offset + chunk, samples.length);
         await session.feed(Float32List.sublistView(samples, offset, end));
         fedSeconds = end / QuranRecognizer.sampleRate;
-        onProgress?.call(
-          CorpusRunProgress(fedSeconds: fedSeconds, totalSeconds: totalSeconds),
-        );
+        onProgress?.call(CorpusRunProgress(fedSeconds: fedSeconds, totalSeconds: totalSeconds));
         if (_cancelled) break;
         await Future<void>.delayed(Duration(milliseconds: chunkMs));
       }
@@ -238,9 +240,7 @@ class CorpusRunner {
     return CorpusRunResult(
       expectedRefs: expectedRefs,
       transcriptRefs: transcriptRefs,
-      transcriptWords: <String>[
-        for (final ref in transcriptRefs) ..._wordsOfRef(ref),
-      ],
+      transcriptWords: <String>[for (final ref in transcriptRefs) ..._wordsOfRef(ref)],
       rawTranscriptWords: rawStitcher.words,
       seenRefs: seenRefs,
       stableRefs: stableRefs,

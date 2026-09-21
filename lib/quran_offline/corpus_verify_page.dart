@@ -2,8 +2,8 @@
 ///
 /// 与主界面的分工：
 /// - 主界面 = 实时链路（麦克风采集 → 流式识别），显示不受本页影响；
-/// - 本页 = 准确度验证链路，**不使用麦克风**，把已知原文的语料音频按实时节奏
-///   直接喂入同一套流式会话，因此结果只反映「引擎 + 算法」，与抓音质量无关。
+/// - 本页默认使用离线实际 ASR 校核；关闭开关可运行旧流式章节诊断。
+///   两种模式都不使用麦克风，离线达标不代表实时跟踪达标。
 ///
 /// 跑完自动进入 [QuranComparePage]（左原文 / 右转写），回到本页后列表上会保留
 /// 该条语料的命中情况与 F1。
@@ -18,11 +18,13 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'corpus_audio.dart';
 import 'corpus_catalog.dart';
 import 'corpus_runner.dart';
+import 'offline_transcriber.dart';
 import 'quran_assets.dart';
 import 'quran_compare_page.dart';
 import 'quran_recognizer.dart';
 import 'reference_text.dart';
 import 'word_alignment.dart';
+import 'word_error_rate.dart';
 
 /// 一条语料的加载结果。
 class _CorpusEntry {
@@ -40,7 +42,7 @@ class _CorpusEntry {
   /// 已解码的采样（加载失败时为 null）。
   final Float32List? samples;
 
-  /// 候选原文（第一条为经文库/文件的完整原文，可能还有「去掉太斯米前缀」变体）。
+  /// 按语料标注预先固定的参考原文（仅一条）。
   final List<ReferenceText>? references;
 
   /// 加载/解析失败原因。
@@ -124,6 +126,7 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
   String? _loadError;
   String? _runningId;
   double _progress = 0;
+  bool _offlineMode = true;
 
   @override
   void initState() {
@@ -174,12 +177,12 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
       return _CorpusEntry(
         item: item,
         samples: samples,
-        references: CorpusCatalog.referenceVariants(reference),
+        references: [
+          CorpusCatalog.fixedReference(reference, includesBismillah: item.includesBismillah),
+        ],
         surahName: item.reference.isRange
-            ? (widget.assets
-                    .verse(item.reference.surah!, item.reference.ayahStart)
-                    ?.surahName ??
-                '')
+            ? (widget.assets.verse(item.reference.surah!, item.reference.ayahStart)?.surahName ??
+                  '')
             : '',
       );
     } catch (error) {
@@ -231,7 +234,8 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     if (_runningId != null) return;
     final usable = _entries.where((entry) => entry.usable).toList();
     if (usable.isEmpty) return;
-    _log('开始批量灌音：共 ${usable.length} 条');
+    _log('开始批量${_offlineMode ? "离线校核" : "流式灌音"}：共 ${usable.length} 条');
+    var excellent = 0;
     var fullHit = 0;
     var judged = 0;
     var matchedAyahs = 0;
@@ -239,14 +243,24 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     for (final entry in usable) {
       if (!mounted) return;
       await _run(entry, openCompare: false);
+      final alignment = _outcomes[entry.item.id]?.alignment;
+      if (alignment != null &&
+          alignment.f1 >= 0.9 &&
+          alignment.precision >= 0.9 &&
+          alignment.coverage >= 0.9) {
+        excellent++;
+      }
       final result = _outcomes[entry.item.id]?.result;
-      if (result == null || result.expectedRefs.isEmpty) continue;
+      if (result == null || result.isOffline || result.expectedRefs.isEmpty) continue;
       judged++;
       matchedAyahs += result.matchedRefs.length;
       totalAyahs += result.expectedRefs.length;
       if (result.hit == true) fullHit++;
     }
-    _log('语料验证完成：章节命中 $matchedAyahs/$totalAyahs 节；整段全中 $fullHit/$judged 条');
+    _log(
+      '语料验证完成：F1/准确率/覆盖率均≥0.9：$excellent/${usable.length} 条'
+      '${_offlineMode ? "（离线实际转写）" : "；瞬时章节召回 $matchedAyahs/$totalAyahs，完整召回 $fullHit/$judged"}',
+    );
   }
 
   /// 灌音一条语料，跑完与原文比对，并按需进入比对页。
@@ -263,7 +277,9 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
       _progress = 0;
       _logs.clear();
     });
-    _log('开始灌音：${entry.item.title}（${CorpusAudio.durationSeconds(samples).toStringAsFixed(1)}s）');
+    _log(
+      '开始${_offlineMode ? "离线校核" : "灌音"}：${entry.item.title}（${CorpusAudio.durationSeconds(samples).toStringAsFixed(1)}s）',
+    );
 
     final runner = CorpusRunner(
       recognizer: widget.recognizer,
@@ -273,7 +289,37 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     );
     CorpusRunResult result;
     try {
-      result = await runner.run(onProgress: _onProgress);
+      if (_offlineMode) {
+        final watch = Stopwatch()..start();
+        final transcription =
+            await OfflineTranscriber(
+              runner: widget.recognizer.runner,
+              decoder: widget.recognizer.decoder,
+              vocab: widget.assets.vocab,
+            ).transcribe(
+              samples,
+              isCancelled: () => !mounted,
+              onProgress: (fraction) {
+                if (mounted) setState(() => _progress = fraction);
+              },
+            );
+        watch.stop();
+        result = CorpusRunResult(
+          expectedRefs: entry.item.expectedRefs,
+          transcriptRefs: const [],
+          transcriptWords: transcription.words,
+          rawTranscriptWords: transcription.words,
+          seenRefs: const [],
+          stableRefs: const [],
+          committedRefs: const [],
+          eventCount: transcription.segments.length,
+          elapsed: watch.elapsed,
+          advancedSeconds: 0,
+          isOffline: true,
+        );
+      } else {
+        result = await runner.run(onProgress: _onProgress);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _runningId = null);
@@ -282,39 +328,40 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     }
     if (!mounted) return;
 
-    // 原文可能有多个变体（见 [CorpusCatalog.referenceVariants]）：取与音频更贴合的那个
-    final variants = entry.references!;
-    var chosen = variants.first;
-    var alignment = WordAlignment.align(chosen.words, result.transcriptWords);
-    for (final candidate in variants.skip(1)) {
-      final candidateAlignment = WordAlignment.align(candidate.words, result.transcriptWords);
-      if (candidateAlignment.f1 > alignment.f1) {
-        chosen = candidate;
-        alignment = candidateAlignment;
-      }
-    }
+    // 参考在载入语料时冻结，不按预测结果挑选最高分的原文。
+    final chosen = entry.reference!;
+    final alignment = WordAlignment.align(chosen.words, result.transcriptWords);
     setState(() {
       _runningId = null;
       _progress = 1;
       _outcomes[entry.item.id] = _RunOutcome(result: result, alignment: alignment);
     });
-    if (!identical(chosen, variants.first)) {
-      _log('原文采用变体：${chosen.source}');
-    }
+    _log('固定参考：${chosen.source}');
 
-    _log('转写稿 ${result.transcriptWords.length} 词（稳定命中 ${result.transcriptRefs.length} 节）· '
-        '逐词原始输出 ${result.rawTranscriptWords.length} 词 · 事件 ${result.eventCount} 次 · '
-        '耗时 ${(result.elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s'
-        '${result.advancedSeconds > 0 ? ' · 窗口前移 ${result.advancedSeconds.toStringAsFixed(1)}s' : ''}');
-    _log('稳定命中：${result.stableRefs.isEmpty ? '无' : result.stableRefs.join(' → ')}');
-    _log('识别章节（含瞬时）：${result.seenRefs.isEmpty ? '无' : result.seenRefs.join(' → ')}');
-    _log('比对 原文${alignment.referenceCount}词/转写${alignment.hypothesisCount}词 '
-        'F1=${alignment.f1.toStringAsFixed(3)} '
-        '覆盖率=${alignment.coverage.toStringAsFixed(3)} '
-        '准确率=${alignment.precision.toStringAsFixed(3)} '
-        '一致=${alignment.matchCount} 近似=${alignment.nearCount} '
-        '错配=${alignment.mismatchCount} 缺失=${alignment.missingCount} 多余=${alignment.extraCount} '
-        '结论=${alignment.verdict}');
+    _log(
+      '${result.isOffline ? "离线实际转写" : "章节重建稿"} ${result.transcriptWords.length} 词 · '
+      '${result.isOffline ? "推理分段" : "流式事件"} ${result.eventCount} 次 · '
+      '耗时 ${(result.elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s'
+      '${result.advancedSeconds > 0 ? ' · 窗口前移 ${result.advancedSeconds.toStringAsFixed(1)}s' : ''}',
+    );
+    if (!result.isOffline) {
+      _log('稳定命中：${result.stableRefs.isEmpty ? '无' : result.stableRefs.join(' → ')}');
+      _log('识别章节（含瞬时）：${result.seenRefs.isEmpty ? '无' : result.seenRefs.join(' → ')}');
+    }
+    _log(
+      '比对 原文${alignment.referenceCount}词/转写${alignment.hypothesisCount}词 '
+      'F1=${alignment.f1.toStringAsFixed(3)} '
+      '覆盖率=${alignment.coverage.toStringAsFixed(3)} '
+      '准确率=${alignment.precision.toStringAsFixed(3)} '
+      '一致=${alignment.matchCount} 近似=${alignment.nearCount} '
+      '错配=${alignment.mismatchCount} 缺失=${alignment.missingCount} 多余=${alignment.extraCount} '
+      '结论=${alignment.verdict}',
+    );
+    final strict = WordErrorRate.compare(chosen.words, result.transcriptWords);
+    _log(
+      '严格WER=${strict.rate.toStringAsFixed(3)} '
+      '替换=${strict.substitutions} 缺失=${strict.deletions} 多余=${strict.insertions}',
+    );
 
     if (!openCompare) return;
     await Navigator.of(context).push(
@@ -336,8 +383,10 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     if (event == null) return;
     final ref = event.match.champion?.ref;
     if (event.justCommitted) {
-      _log('已确认 ${event.committedRef}（累计 ${event.committedSequence.length} 节'
-          '${event.advancedSeconds > 0 ? '，窗口前移 ${event.advancedSeconds.toStringAsFixed(1)}s' : ''}）');
+      _log(
+        '已确认 ${event.committedRef}（累计 ${event.committedSequence.length} 节'
+        '${event.advancedSeconds > 0 ? '，窗口前移 ${event.advancedSeconds.toStringAsFixed(1)}s' : ''}）',
+      );
     } else if (event.stable && ref != null) {
       _log('稳定 $ref（读 ${event.readWords}/${event.words.length} 词）');
     }
@@ -382,13 +431,17 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     }
     final error = _loadError;
     if (error != null) {
-      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(error)));
+      return Center(
+        child: Padding(padding: const EdgeInsets.all(24), child: Text(error)),
+      );
     }
     return Column(
       children: [
         if (_runningId != null) LinearProgressIndicator(value: _progress),
         _buildHint(context),
-        Expanded(child: ListView.builder(itemCount: _entries.length, itemBuilder: _buildRow)),
+        Expanded(
+          child: ListView.builder(itemCount: _entries.length, itemBuilder: _buildRow),
+        ),
         _buildLogs(context),
       ],
     );
@@ -403,10 +456,19 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '不使用麦克风：选中语料后把音频按实时节奏灌入引擎，跑完与语料原文逐词比对。',
-            style: theme.textTheme.bodySmall,
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('离线校核'),
+            subtitle: Text(_offlineMode ? '完整上下文分段转写，用于语料准确度验收' : '流式诊断：观察章节匹配与窗口推进'),
+            value: _offlineMode,
+            onChanged: _runningId != null
+                ? null
+                : (value) => setState(() {
+                    _offlineMode = value;
+                    _outcomes.clear();
+                  }),
           ),
+          Text('不使用麦克风：离线校核直接比对模型转写；关闭后可查看流式章节重建诊断。', style: theme.textTheme.bodySmall),
           const SizedBox(height: 4),
           Text(
             '内置语料由 tools/quran_offline/download_corpus.sh 生成（多节连续诵读）；'
@@ -443,14 +505,13 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
       );
     } else if (outcome != null) {
       final result = outcome.result;
-      final judged = result.expectedRefs.isNotEmpty;
+      final judged = !result.isOffline && result.expectedRefs.isNotEmpty;
       final hit = result.hit;
       trailing = Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text('F1=${outcome.alignment.f1.toStringAsFixed(2)}',
-              style: theme.textTheme.labelLarge),
+          Text('F1=${outcome.alignment.f1.toStringAsFixed(2)}', style: theme.textTheme.labelLarge),
           Text(
             judged
                 ? '章节 ${result.matchedRefs.length}/${result.expectedRefs.length}'
@@ -470,7 +531,7 @@ class _CorpusVerifyPageState extends State<CorpusVerifyPage> {
     final subtitle = entry.error != null
         ? entry.error!
         : '${CorpusAudio.durationSeconds(entry.samples!).toStringAsFixed(1)}s · '
-            '原文 ${entry.reference!.words.length} 词 · $source';
+              '原文 ${entry.reference!.words.length} 词 · $source';
 
     return ListTile(
       enabled: entry.usable && _runningId == null,

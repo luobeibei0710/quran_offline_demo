@@ -12,6 +12,9 @@
 set -euo pipefail
 
 RECITER="${RECITER:-Alafasy}"
+# 参考标注与预测隔离。换音源时按实际音频设置 true/false，不按跑分择优。
+INCLUDES_BISMILLAH="${INCLUDES_BISMILLAH:-false}"
+case "$INCLUDES_BISMILLAH" in true|false) ;; *) echo 'INCLUDES_BISMILLAH must be true or false' >&2; exit 2;; esac
 BASE_URL="${BASE_URL:-https://verses.quran.com}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEST="${REPO_ROOT}/assets/quran_offline/corpus"
@@ -46,7 +49,7 @@ for range in "${RANGE_LIST[@]}"; do
   duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${out}")
   echo "生成：$(basename "${out}")（${duration}s，$(du -h "${out}" | cut -f1)）"
 
-  MANIFEST_ENTRIES+=("{\"file\":\"$(basename "${out}")\",\"surah\":${surah_num},\"ayahStart\":$((10#${ayah_start})),\"ayahEnd\":$((10#${ayah_end}))}")
+  MANIFEST_ENTRIES+=("{\"file\":\"$(basename "${out}")\",\"surah\":${surah_num},\"ayahStart\":$((10#${ayah_start})),\"ayahEnd\":$((10#${ayah_end})),\"includesBismillah\":${INCLUDES_BISMILLAH}}")
 done
 
 # 清单：应用启动时读取它来列出语料（音频本身不入版本库）

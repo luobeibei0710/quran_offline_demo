@@ -61,8 +61,44 @@ class QuranVerse {
   String toString() => 'QuranVerse($ref, $surahNameEn)';
 }
 
+/// 经文索引的最小契约：匹配与词进度算法只依赖本接口。
+///
+/// 旧功能由 [QuranAssets]（6236 节旧经文库）实现，广播功能由独立的三章
+/// 新库实现。两者**共用算法、分别注入数据与索引**，因此广播功能不会隐式
+/// 读取旧经文库，也不会在未匹配时回退旧库。
+abstract interface class VerseIndex {
+  /// CTC 词表（token id -> token 文本），用于按词分组索引。
+  ///
+  /// 这是 ASR 模型侧资源，可被新旧功能共同复用；经文文本与索引不得复用。
+  Map<int, String> get vocab;
+
+  /// 全部经文，按章、节升序。
+  List<QuranVerse> get verses;
+
+  /// 取指定跨度的 CTC token 序列（`surah:ayahStart:ayahEnd`）。
+  ///
+  /// @param surah 章号
+  /// @param ayahStart 起始节
+  /// @param ayahEnd 结束节（含）
+  /// @return token 序列；该跨度不存在时返回 null
+  List<int>? tokensFor(int surah, int ayahStart, int ayahEnd);
+
+  /// 取一节经文。
+  ///
+  /// @param surah 章号
+  /// @param ayah 节号
+  /// @return 经文；不存在时返回 null
+  QuranVerse? verse(int surah, int ayah);
+
+  /// 取整章经文。
+  ///
+  /// @param surah 章号
+  /// @return 该章经文；不存在时返回 null
+  List<QuranVerse>? versesOfSurah(int surah);
+}
+
 /// 古兰经离线识别所需的全部数据资产。
-class QuranAssets {
+class QuranAssets implements VerseIndex {
   QuranAssets._({
     required this.vocab,
     required this.verses,
@@ -72,10 +108,35 @@ class QuranAssets {
     required this.versesBySurah,
   });
 
+  /// 只加载词表与 blank id，不读取旧经文库。
+  ///
+  /// 广播功能复用 ASR 模型侧的词表与分词资源，但不得加载 `quran.json` 或
+  /// `quran_ctc_tokens.json`。用本方法得到的实例只满足解码需要，[verses]
+  /// 与 [spanTokens] 为空，**不能**用于旧功能。
+  ///
+  /// @param bundle 资产来源，默认 [rootBundle]
+  /// @return 只含词表的资产对象
+  /// @throws FormatException `vocab.json` 缺少可用 token 时抛出
+  static Future<QuranAssets> loadVocabularyOnly({AssetBundle? bundle}) async {
+    final assets = bundle ?? rootBundle;
+    final vocab = await _loadVocab(assets);
+    final blankId = _blankIdOf(vocab);
+    return QuranAssets._(
+      vocab: vocab,
+      verses: const <QuranVerse>[],
+      spanTokens: const <String, List<int>>{},
+      blankId: blankId,
+      versesByRef: const <String, QuranVerse>{},
+      versesBySurah: const <int, List<QuranVerse>>{},
+    );
+  }
+
   /// token id -> token 文本。
+  @override
   final Map<int, String> vocab;
 
   /// 全部 6236 节经文（按 surah/ayah 升序）。
+  @override
   final List<QuranVerse> verses;
 
   /// `surah:ayahStart:ayahEnd` -> token 序列。
@@ -103,12 +164,8 @@ class QuranAssets {
   static Future<QuranAssets> load({AssetBundle? bundle}) async {
     final assets = bundle ?? rootBundle;
 
-    final vocabRaw = jsonDecode(await assets.loadString('$assetDir/vocab.json')) as Map<String, dynamic>;
-    final vocab = <int, String>{};
-    for (final entry in vocabRaw.entries) {
-      vocab[int.parse(entry.key)] = entry.value as String;
-    }
-    final blankId = vocab.keys.isEmpty ? 0 : vocab.keys.reduce((a, b) => a > b ? a : b);
+    final vocab = await _loadVocab(assets);
+    final blankId = _blankIdOf(vocab);
 
     final quranRaw = jsonDecode(await assets.loadString('$assetDir/quran.json')) as List<dynamic>;
     final verses = <QuranVerse>[];
@@ -153,9 +210,38 @@ class QuranAssets {
   /// @param ayahStart 起始节
   /// @param ayahEnd 结束节（含）
   /// @return token 序列；不存在时返回 null
+  @override
   List<int>? tokensFor(int surah, int ayahStart, int ayahEnd) =>
       spanTokens['$surah:$ayahStart:$ayahEnd'];
 
   /// 取一节经文。
+  @override
   QuranVerse? verse(int surah, int ayah) => versesByRef['$surah:$ayah'];
+
+  /// 取整章经文。
+  ///
+  /// @param surah 章号
+  /// @return 该章经文；不存在时返回 null
+  @override
+  List<QuranVerse>? versesOfSurah(int surah) => versesBySurah[surah];
+
+  /// 解析 `vocab.json`。
+  ///
+  /// @param assets 资产来源
+  /// @return token id -> token 文本
+  static Future<Map<int, String>> _loadVocab(AssetBundle assets) async {
+    final raw = jsonDecode(await assets.loadString('$assetDir/vocab.json')) as Map<String, dynamic>;
+    final vocab = <int, String>{};
+    for (final entry in raw.entries) {
+      vocab[int.parse(entry.key)] = entry.value as String;
+    }
+    return vocab;
+  }
+
+  /// blank id 口径：词表中最大的 token id。
+  ///
+  /// @param vocab 词表
+  /// @return blank token id；词表为空时返回 0
+  static int _blankIdOf(Map<int, String> vocab) =>
+      vocab.keys.isEmpty ? 0 : vocab.keys.reduce((a, b) => a > b ? a : b);
 }

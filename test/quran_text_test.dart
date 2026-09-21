@@ -1,7 +1,7 @@
 /// [QuranText] 的阿拉伯语归一化与相似度测试。
 ///
-/// 这些断言与 Tilawa 的 `normalizer.ts` + `levenshtein.ts` 语义对齐，
-/// 是召回质量的第一道防线，故覆盖变音符号、字母变体与空白处理。
+/// 这些断言覆盖与 Tilawa 对齐的基本语义，以及外部输入的 Arabic Presentation
+/// Forms-A/B 兼容，是召回质量的第一道防线。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +27,47 @@ void main() {
       expect(QuranText.normalize('\uFEFF بسم   الله '), 'بسم الله');
       expect(QuranText.normalize('   '), '');
       expect(QuranText.normalize(''), '');
+    });
+
+    test('Presentation Forms 的词首、词中、词尾与独立形等价于逻辑字母', () {
+      for (final shapedBeh in <String>[
+        '\uFE8F',
+        '\uFE90',
+        '\uFE91',
+        '\uFE92',
+      ]) {
+        expect(QuranText.normalize(shapedBeh), 'ب');
+      }
+      expect(QuranText.normalize('\uFE91\uFEB4\uFEE2'), 'بسم');
+    });
+
+    test('展开 Allah 与 lam-alef 合字后继续应用既有字母归一化', () {
+      expect(QuranText.normalize('\uFDF2'), 'الله');
+      for (final lamAlef in <String>[
+        '\uFEF5',
+        '\uFEF6',
+        '\uFEF7',
+        '\uFEF8',
+        '\uFEF9',
+        '\uFEFA',
+        '\uFEFB',
+        '\uFEFC',
+      ]) {
+        expect(QuranText.normalize(lamAlef), 'لا');
+      }
+    });
+
+    test('没有 Unicode 分解的装饰合字与符号保持原样', () {
+      expect(QuranText.normalize('\uFDFD'), '\uFDFD');
+      expect(QuranText.normalize('\uFE73'), '\uFE73');
+    });
+
+    test('Presentation Forms 归一化幂等且不改变既有逻辑字符结果', () {
+      const shaped = '\uFE91\uFEB4\uFEE2 \uFDF2 \uFEFB';
+      final normalized = QuranText.normalize(shaped);
+      expect(QuranText.normalize(normalized), normalized);
+      expect(QuranText.normalize('بِسْمِ اللَّهِ'), 'بسم الله');
+      expect(QuranText.normalize('أحمد رحمة موسى'), 'احمد رحمه موسي');
     });
   });
 

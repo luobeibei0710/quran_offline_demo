@@ -19,6 +19,8 @@ class TextCtcResult {
     required this.text,
     required this.tokenIds,
     required this.wordEnds,
+    this.tokenStarts = const [],
+    this.tokenEnds = const [],
   });
 
   /// 归一化后的文本。
@@ -29,6 +31,10 @@ class TextCtcResult {
 
   /// 词结束下标，用于词级进度展示。
   final List<int> wordEnds;
+
+  /// 每个折叠 token 对应的起止帧（含端点），用于跨窗口时间对齐。
+  final List<int> tokenStarts;
+  final List<int> tokenEnds;
 }
 
 /// 文本 CTC 解码器。
@@ -41,8 +47,8 @@ class TextCtcDecoder {
   /// @param vocab token id -> token 文本（来自 `vocab.json`）
   /// @param blankId blank token 的 id，默认为词表最大 id
   TextCtcDecoder(Map<int, String> vocab, {int? blankId})
-      : _vocab = vocab,
-        _blankId = blankId ?? (vocab.keys.isEmpty ? 0 : vocab.keys.reduce((a, b) => a > b ? a : b));
+    : _vocab = vocab,
+      _blankId = blankId ?? (vocab.keys.isEmpty ? 0 : vocab.keys.reduce((a, b) => a > b ? a : b));
 
   final Map<int, String> _vocab;
   final int _blankId;
@@ -61,6 +67,8 @@ class TextCtcDecoder {
   /// @return 解码结果
   TextCtcResult decode(Float32List logprobs, int timeSteps, int vocabSize) {
     final tokenIds = <int>[];
+    final starts = <int>[];
+    final ends = <int>[];
     var previous = -1;
 
     for (var t = 0; t < timeSteps; t++) {
@@ -76,6 +84,10 @@ class TextCtcDecoder {
       }
       if (bestIndex != previous && bestIndex != _blankId) {
         tokenIds.add(bestIndex);
+        starts.add(t);
+        ends.add(t);
+      } else if (bestIndex == previous && bestIndex != _blankId && ends.isNotEmpty) {
+        ends[ends.length - 1] = t;
       }
       previous = bestIndex;
     }
@@ -84,6 +96,8 @@ class TextCtcDecoder {
       text: tokenIdsToText(tokenIds),
       tokenIds: tokenIds,
       wordEnds: tokenIdsToWordEnds(tokenIds),
+      tokenStarts: starts,
+      tokenEnds: ends,
     );
   }
 
