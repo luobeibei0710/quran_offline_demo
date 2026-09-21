@@ -1,245 +1,112 @@
-# 古兰经离线识别 Demo
+# 古兰经广播离线识别
 
 [![CI](https://github.com/luobeibei0710/quran_offline_demo/actions/workflows/ci.yml/badge.svg)](https://github.com/luobeibei0710/quran_offline_demo/actions/workflows/ci.yml)
 
-端侧**全离线**的《古兰经》诵读识别 Demo（Flutter）：麦克风实时采集 → ONNX 声学模型推理 →
-CTC 解码 → 经文约束匹配，实时给出「正在诵读第几章第几节」并渲染对应标准经文；另附
-「原文 / 转写」逐词比对页，用于核对识别质量。**音频不出设备**。
+端侧**全离线**的《古兰经》广播识别应用（Flutter）：外部广播/诵读声 → 麦克风收音 →
+ONNX 声学模型推理 → CTC 解码 → **全经 6236 节**经文匹配 → **权威人工译本查表**（62 种语言）
+或端侧机器翻译兜底 → 本地历史留档。
 
-本仓库是验证工程：先确认端侧识别链路与精度是否达标，再考虑移植到正式项目。
-Android 与 iOS 共用同一套 Dart 算法层，平台差异只在「调 ONNX Runtime 推理」这一层。
+识别全程**不联网、不上传音频**，音频与推理数据都不出设备。
 
-> **当前产品首页是「广播识别」**（`lib/broadcast/`）：外部广播收音 → 离线 ASR →
-> **独立三章新库**（开端章 / 王权章 / 纯洁章，41 节）匹配 → ML Kit 端侧翻译 → 本地历史。
-> 旧 Demo（实时跟读、语料校核、流式诊断）保留为**开发诊断**，入口在首页右上角扳手图标。
-> 广播功能的实际交付范围、可复现证据与**未验收项**见
-> [实施交付记录](docs/broadcast-implementation-20260921.md)。
+Android 与 iOS 共用同一套 Dart 算法层，平台差异只在「调 ONNX Runtime 推理」这一层
+（`quran_offline/ort` 通道）。
+
+> **产品首页是广播识别**（`lib/broadcast/`）。
+> 早期 Demo（实时跟读、语料准确度校核、流式诊断）已降级为**开发诊断**，
+> 入口在首页右上角的扳手图标（或初始化失败页的「进入开发诊断」按钮），
+> 说明见 [旧 Demo 与流式链路](docs/legacy-demo.md)。
+
+---
 
 ## 功能特性
 
-- **全离线**：声学模型、词表、经文库都在应用内，推理全部在本机完成；
-- **广播识别（新首页）**：三栏显示「实际 ASR 转写 / 匹配经文 / 目标译文」，三类文本各自标注来源，
-  机器翻译不会被标成校订译本；记录持久化，重启仍在；
-- **独立全经语料库**：广播功能只检索自己的全经 6236 节语料（Tanzil 快照 + 独立生成的
-  CTC token 表），检索不到就明确显示未匹配，**不回退旧 6236 节库**
-  （有自动化测试证明它不读取旧库文件）；
-- **62 种语言权威译本**：匹配到经文后查**人工译本**表（中文马坚、英文 Saheeh International
-  等，均为 QuranEnc 授权，界面显示署名与版本），未匹配的解说内容才走 ML Kit 机器翻译；
-- **实时跟读**：滑窗流式识别 + 稳定锁定，界面实时显示章节、标准经文、置信度与词进度；
-- **6236 节全文召回 + CTC 约束精排**：先按识别文本召回候选，再用 CTC 前向后向对数似然精排，
-  而不是把问题简化成分类；
-- **原文 / 转写比对**：把朗读原文与识别转写逐词对齐，给出覆盖率 / 准确率 / F1 与逐词着色；
-- **语料准确度验证**：右上角进入语料列表，默认用离线实际 ASR 转写直接比对固定原文；可关闭
-  「离线校核」Switch，进入旧流式章节匹配与窗口推进诊断。两种模式都不经麦克风；
-- **外部阿拉伯文本兼容**：归一化时展开 Unicode Arabic Presentation Forms-A/B；Flutter 继续接收
-  逻辑字符并自行塑形，不对显示文本做正向 reshape；
-- **能量 VAD 门控**：用「峰值 / 本底」信噪比判据过滤噪声窗口，纯静音不再产出臆测结果；
-- **两端共享算法层**：召回、精排、解码、比对全部是纯 Dart，Android / iOS 只差原生推理桥。
+- **全离线**：声学模型（124.6 MB ONNX）、词表、全经语料与译本全部内置，
+  推理与查表都在本机完成；
+- **全经覆盖**：匹配库是 **114 章 6236 节** Tanzil 快照（`corpusId = tanzil-1.1-uthmani-full`），
+  任意章节的广播内容都能定位，不再是抽样章节；
+- **三栏显示，三类文本互不冒充**：实际 ASR 转写 / 匹配到的标准经文 / 目标语言译文，
+  三栏各自标注来源，机器翻译不会被标成校订译本；
+- **62 种语言权威译本**：命中经文后优先查**人工译本**表（中文马坚、英文 Saheeh International 等，
+  QuranEnc 授权，界面显示出版方与版本），查不到才走机器翻译；
+- **端侧机器翻译兜底**：ML Kit（`google_mlkit_translation` 0.14.0），
+  阿拉伯语经英语中转；缺语言包时明确失败并支持重试，**不降级到云服务**；
+- **实时预览 + 终稿**：收音过程中以 1 秒周期刷新草稿、候选经文与预览译文，
+  片段结束（静音或超长切分）后落库为终稿；
+- **片段的粒度是「一句」不是「一节」**：支持半节、跨节连读、同节复读、跳章；
+  匹配结果以节范围表达，不强行补全未听到的内容；
+- **库外内容如实拒识**：匹配不到就显示未匹配并保留真实转写，
+  不返回「任意最相似的经文」，也不回退任何其它语料库；
+- **持久化历史**：SQLite 保存三类文本快照、匹配范围、比对指标、译文来源与任务状态，
+  重启仍在；支持分页、语言/状态筛选、整体清空、同记录追加另一语言译本；
+- **两端共享算法层**：断句、解码、召回、精排、裁决、对齐、指标全部是纯 Dart。
 
 ## 技术方案
 
 ```
-麦克风 16 kHz PCM16 → float32
+外部广播 / 诵读声
    ↓
-ONNX Runtime（原生：Android AAR / iOS onnxruntime-objc）—— 只做张量翻译
+麦克风 16 kHz 单声道 PCM16 → float32
+   ↓
+ONNX Runtime（Android AAR / iOS onnxruntime-objc 1.22.0）—— 只做张量翻译
    ↓  log_probs [1, T, 1025]
 纯 Dart 算法层（Android / iOS 共用）
+   ├─ 断句状态机（本底自适应的能量 + 静音时长）
    ├─ 贪心 CTC 解码（TextCtcDecoder）
-   ├─ 文本召回（分词倒排 + 覆盖率/编辑相似度）
-   ├─ CTC 约束精排（前向后向对数似然）→ surah:ayah
-   ├─ 词级进度（CTC 强制对齐的内容区判定）→ 提词器高亮
-   ├─ 能量 VAD 门控（峰值/本底信噪比）→ 过滤噪声窗口
-   └─ 实际 ASR 时间拼接 + 词级对齐（动态规划）→ 原文 / 转写比对
-   ↑
-语料默认校核（不经麦克风）：语料 WAV → 声学暂停分段 → 实际 CTC 转写 → 与固定原文比对
-语料流式诊断（Switch 关闭）：语料 WAV → 原流式会话 → 章节重建稿、匹配与窗口推进诊断
+   ├─ 经文召回（倒排分词 + 覆盖率 / 长度匹配度）
+   ├─ CTC 约束精排（前向后向对数似然，按帧归一化）
+   ├─ 候选二次裁决（解释比例分带 + 候选差距）→ confirmed / partial / candidate / unmatched
+   ├─ 词级对齐（Needleman–Wunsch）与比对指标（P / R / F1 / 严格 WER）
+   └─ 翻译来源裁决（校订译本 / 标准原文机翻 / 转写机翻）
    ↓
-本地经文库取标准经文 → 界面展示
+本地全经库取标准经文 + 译本查表 → 三栏展示 → SQLite 落库
 ```
+
+匹配算法的完整口径（阈值、状态判据、指标定义、实测证据）见
+[经文匹配与指标](docs/matching.md)。
 
 ## 界面与交互
 
-主界面为「指标置顶 + 主区经文」的 Streaming 布局，自上而下四段：
+### 首页（三栏）
 
 | 区域 | 内容 |
 |------|------|
-| 状态条 | 当前阶段文案、输入电平条、稳定命中次数 |
-| 章节栏 | 「已锁定」徽标、章名与 `surah:ayah`，其下一行 11 px 小字汇总指标（置信度、声学分、词进度、窗口时长） |
-| 主区 | 默认显示整句奥斯曼体经文（26 px、RTL、长节可纵向滚动） |
-| 日志条 | 固定在底部 76 px，显示最近 5 条事件，同时输出到 logcat |
+| 顶部 | 目标语言下拉（识别中禁用并提示「识别中不可切换」）、离线资源状态与「准备语言包」按钮、当前阶段文案 |
+| 第一栏 识别转写 | 模型实际输出的阿拉伯语（RTL 22 px），识别中显示草稿 |
+| 第二栏 匹配经文 | 全经库标准原文 + `surah:ayah` 范围 + 状态徽标（已确认 / 部分节 / 候选 / 未匹配） |
+| 第三栏 目标译文 | 译文正文 + 来源徽标（校订译本为青色，机器翻译为橙色）+ 输入范围说明 |
+| 底部 | 「开始识别 / 停止识别」大按钮 |
 
-右上角三个入口：**语料验证**（默认离线实际 ASR + 原文比对，采集进行中不可用）、**比对结果**（本轮转写 vs 原文）、
-**重置**。
+AppBar 右上角两个入口：**记录 N**（历史列表）与**扳手图标**（开发诊断）。
 
-主区样式与自动化行为由编译期开关控制：
+### 历史列表与详情
 
-| 开关 | 默认 | 说明 |
-|------|------|------|
-| `_showTeleprompter` | `false` | `false` = 整句经文；`true` = 逐词提词器（已读 / 当前 / 未读三态高亮 + 自动居中滚动） |
-| `_builtinSamples` | 5 条 | 加载完成后自动逐条跑内置样本并汇总命中率，无需麦克风 |
-| `_autoStartListening` | `false` | 加载完成后自动开麦：`--dart-define=quran_auto_start=true` |
-| `_autoStopSeconds` | `0` | 自动开始后多少秒自动停止并输出 `比对预览`（0 = 不停）：`--dart-define=quran_auto_stop_seconds=160` |
-| `_autoCorpus` | `false` | 加载完成后自动进入语料验证并跑一遍全部语料：`--dart-define=quran_auto_corpus=true` |
+- 列表：稳定序号 `#000123`、时间、语言徽标、匹配摘要、转写与译文摘要、删除按钮；
+  分页 50 条，滚动到底自动加载；支持**语言筛选 + 状态筛选**与**全部删除**（识别中禁止）；
+- 详情：三类文本快照 + 比对指标（P / R / F1 / 严格 WER / S-D-I / 词数）
+  + **逐词比对**（一致绿 / 近似黄 / 错配红 / 缺失蓝灰 / 多余橙）
+  + 开发诊断折叠区（匹配证据 JSON、耗时、片段边界）
+  + 「追加语言版本」菜单（同一记录追加另一语言译本，不覆盖已有译文）。
 
-> 三个联调开关走 `--dart-define` 而非改源码，避免把联调状态误提交。
-> Android 的 `input tap` 被系统禁用、iOS 模拟器无法脚本点击，无人值守验证只能靠它们。
+## 翻译来源策略
 
-## 语料准确度验证（不经麦克风）
+命中经文后按三条路径裁决，界面与数据库都记录真实来源，**不伪造译本**：
 
-默认链路：**选中语料 → 按声学暂停分段 → 模型实际 CTC 转写 → 与预先冻结的原文逐词比对**。
-页面 Switch 可切到旧流式诊断，观察章节匹配、稳定事件和窗口推进。三条链路的分工是：
+| 来源 | 触发条件 | 输入 | 界面标记 |
+|------|----------|------|----------|
+| `curatedEdition` | 匹配到经文，且目标语言有 QuranEnc 授权人工译本 | 标准原文 | 校订译本 + 版本署名 |
+| `machineCanonical` | 匹配到经文，但该语言无译本 | 标准原文（半节只取已确认词范围） | 机器翻译·标准原文 |
+| `machineAsr` | 未匹配到经文 | 实际 ASR 转写 | 机器翻译·识别转写（未匹配经文） |
 
-| | 实时（主界面） | 离线校核（默认） | 流式诊断（Switch 关闭） |
-|---|---|---|---|
-| 输入 | 麦克风 | 同一语料 WAV | 同一语料 WAV 按实时节奏灌入 |
-| 关注点 | 收音、延迟、实时章节与进度 | 模型实际转写的准确度 | 章节匹配、稳定事件与窗口推进 |
-| 输出 | 实时章节与转写 | 实际 ASR 词、容错 F1/P/R、严格 WER | 章节重建稿与章节召回诊断 |
+要点：
 
-真机实测中麦克风外放收音的 RMS 常在 0.003~0.026（接近底噪）而被 VAD 挡掉，比对结果反映的是收音
-而不是算法；离线语料路径用于把抓音与模型实际转写分开验证。
-
-用法：
-
-1. 主界面右上角「语料验证」→ 语料列表（**内置多节连续诵读** + 设备上的自定义语料）；默认打开
-   「离线校核」；
-2. 点一条即开始离线实际 ASR：按 20 ms RMS 找声学暂停并在暂停中点切段；连续低能量至少 0.35 s，
-   阈值为 `max(1e-5, 中位 RMS × 0.4)`，每段至少 2 s、尾段至少 1 s。无足够暂停且超过 30 s 时，
-   使用 30 s 窗口、8 s 重叠的有界回退；
-3. 跑完**自动进入「原文 / 转写」比对页**：原文 = 该语料的经文库标准经文（内置语料）或你提供的
-   原文（自定义语料），转写 = 模型实际输出；返回列表后保留 F1 与结论；
-4. 右上角「全部跑一遍」批量校核，逐条要求容错 F1、准确率、覆盖率均 ≥0.9；日志同时单列严格 WER；
-5. 关闭「离线校核」后再运行，才会进入原来的实时节奏灌音链路并显示章节召回诊断。
-
-### 语料来源
-
-| 来源 | 位置 | 说明 |
-|------|------|------|
-| 内置语料 | `assets/quran_offline/corpus/`（由 `manifest.json` 描述） | `bash tools/quran_offline/download_corpus.sh` 从 Quran.com CDN 取逐节诵读、拼接成 16 kHz 单声道 WAV；清单用 `includesBismillah` 预先声明音频是否包含太斯米，评测不会按预测结果择优；**音频与模型一样不入版本库**，clone 后需先跑该脚本 |
-| 设备语料 | 应用私有目录 `files/corpus/*.wav` | 可有同名 `.txt` 作为原文；无 txt 时按文件名 `corpus_SSS_AAA_BBB.wav` 的章节区间取经文库原文 |
-
-默认三段内置语料（短节连读 / 中长 / 长）：
-
-| 语料 | 节数 | 原文词数 | 时长 |
-|------|------|----------|------|
-| `36:1-5` | 5 | 12 | 28 s |
-| `55:1-13` | 13 | 43 | 87 s |
-| `67:1-11` | 11 | 122 | 159 s |
-
-### 转写稿口径（关键）
-
-默认离线校核的转写稿是**模型实际 CTC 输出**。暂停切段互不重叠；超过 30 s 的无停顿段才用带时间戳的
-重叠窗口拼接。转写器只接收音频、模型输出和词表，不查询期望章节或参考原文。
-
-旧流式诊断的「转写稿」仍是**稳定命中章节的标准经文重建稿**，不是逐词 ASR。它保留用于分析章节
-误匹配、稳定事件和窗口推进，不作为当前实际 ASR 准确度结论。旧链路曾因窗口重复覆盖而把 47 词语料
-累积成 150 个原始输出词、126 词语料累积成 1258 词，随后才改用章节重建稿；这是历史诊断口径。
-
-因此页面上的指标含义是：
-
-- **覆盖率 / 准确率 / F1**：沿用容错词对齐，近似词计半分；这组数值用于当前“优秀 ≥0.90”门禁；
-- **严格 WER**：归一化后按词精确计算替换、缺失和多余，不等于“90% 严格词准确率”；
-- **章节命中**：仅属于关闭 Switch 后的旧流式诊断，不与默认离线实际 ASR 的 F1 混为同一口径。
-
-### 当前离线实际 ASR 基准（主机与 Android 真机均已验）
-
-| 语料 | 固定参考 | F1 | 准确率 P | 覆盖率 R | 严格 WER |
-|------|----------|----|----------|----------|----------|
-| `36:1-5` | 12 词 | 0.958333 | 0.958333 | 0.958333 | 0.166667 |
-| `55:1-13` | 43 词 | 0.976744 | 0.976744 | 0.976744 | 0.139535 |
-| `67:1-11` | 122 词 | 0.967213 | 0.967213 | 0.967213 | 0.163934 |
-
-三条均达到容错 F1/P/R ≥0.9。这里的严格 WER 已单独列出，不能把 F1/P/R 解读成严格 90% 词准确率。
-本表已在主机与 Redmi Android 16 真机分别复现，三段结果一致；真机处理约 0.9/2.6/4.9 秒，不含模型加载。完整证据见
-[docs/offline-accuracy-20260920.md](docs/offline-accuracy-20260920.md)。
-
-### 历史流式章节重建诊断（旧口径，保留作回归）
-
-旧链路在 Redmi 24117RK2CC / Android 16 / arm64 上得到：`36:1-5` F1 0.744、`55:1-13` F1 0.861、
-`67:1-11` F1 0.752，章节瞬时召回 25/29、整段全中 2/3。该 F1 的 hypothesis 是章节重建的标准经文，
-当前表的 hypothesis 是模型实际 ASR 输出，两者**不能直接比较为算法提升幅度**。详情见
-[docs/fragment-matching-experiment.md](docs/fragment-matching-experiment.md)。
-
-### 旧流式灌音链路上的两个坑（已修并保留回归）
-
-1. **能量门控会整段挡掉连续朗读**：语料帧能量的峰值/中位数只有 1.3~2.0，低于 `speechSnrRatio=2.5`
-   （症状：灌音 0 事件、转写 0 词、F1 全 0）→ 灌音会话按「已知是朗读」建
-   （`createSession(assumeSpeech: true)`），实时采集路径仍用完整门控；
-2. **窗口推进在错误匹配下会裁掉真内容**：实测 159 s 语料被前移掉 155 s，越错越多
-   → 现在只在冠军是**已确认序列的延续**（同节 / 往后 1~3 节 / 下一章开头）时才推进，
-   且单次最多裁掉窗口的 60%。
-
-### 一次失败的尝试（已回滚，留档）
-
-为压掉「多余词」而试过**片段候选 + 内容帧短缺惩罚 + 信任门控 + 序列先验**四处改动，
-真机跑批显示**净负收益**（`55:1-13` 覆盖率 0.926→0.649）并已全部回滚；
-数据、原因与「下一步该怎么做」见 [docs/fragment-matching-experiment.md](docs/fragment-matching-experiment.md)。
-
-### 与 Tilawa 原项目的对比
-
-同一批语料、同一份资产、**同一套指标代码**下与 Tilawa 官方 npm 包（`@tilawa/core`，默认配置）
-的实测对比见 [docs/tilawa-comparison.md](docs/tilawa-comparison.md)：Tilawa 在短句连读上更干净
-（`36:1-5` F1 1.000）且更快，本项目的优势在「连读多节 + 含常见短语」的语料上
-（`55:1-13` 本项目 13/13、Tilawa 锁错章 0/13）。复现脚本：`tools/tilawa_compare/` 与
-`tool/tilawa_compare_metrics.dart`。
-
-### 自定义语料（换语料不必重新构建）
-
-需要 **16 kHz / 单声道 / 16-bit PCM 的 WAV**（引擎输入格式；mp3 请先转码）：
-
-```bash
-# 1) 转码（macOS 自带 afconvert；Windows/Linux 用 ffmpeg 等效参数）
-afconvert -f WAVE -d LEI16@16000 -c 1 我的朗读.mp3 corpus_audio.wav
-
-# 2) 推音频与（可选）原文到应用私有目录的 corpus/ 子目录
-adb push corpus_audio.wav /data/local/tmp/
-adb shell run-as com.llvision.quran_offline_demo mkdir -p files/corpus
-adb shell run-as com.llvision.quran_offline_demo cp /data/local/tmp/corpus_audio.wav files/corpus/
-adb push 我的朗读.txt /data/local/tmp/
-adb shell run-as com.llvision.quran_offline_demo cp "/data/local/tmp/我的朗读.txt" files/corpus/corpus_audio.txt
-```
-
-回到语料验证页点右上角刷新即可看到「设备语料」；格式不符时列表上会直接标出原因
-（例如 `采样率=44100`）并给出转码命令。
-
-## 原文 / 转写比对
-
-把「朗读原文」（参考答案）与端侧「转写结果」逐词对照，核对模型听到了什么、错在哪里。
-结束识别后日志会输出一行 `比对预览`（词数、F1、覆盖率、准确率、各状态词数、结论），
-点 AppBar 的比对图标进入「左原文 / 右转写」逐词对照页。
-
-转写稿来自本次识别的全部窗口结果，按「最长词级重叠」去重后拼接（`transcript_stitcher.dart`），
-避免同一段话被多轮窗口重复计入。
-
-### 判定阈值（`word_alignment.dart`）
-
-逐词对齐用 Needleman–Wunsch 动态规划（缺词/多词各扣 `gapPenalty=0.5`），词相似度取归一化后的
-字符级 Levenshtein 比例。一旦漏词、多词，按下标硬比会让后面所有词全部判错，动态规划可以避免。
-
-| 状态 | 条件 | 颜色 |
-|------|------|------|
-| 一致 | 相似度 ≥ `matchThreshold=0.80` | 绿 |
-| 近似 | `nearThreshold=0.50` ≤ 相似度 < 0.80 | 黄 |
-| 错配 | 相似度 < 0.50 | 红 |
-| 缺失 | 原文有、转写无 | 灰 |
-| 多余 | 转写有、原文无 | 橙 |
-
-整体指标：`覆盖率 = (一致 + 0.5×近似) / 原文词数`、`准确率 = (一致 + 0.5×近似) / 转写词数`、
-`F1` 取两者调和平均；结论分档 `优秀 ≥0.90`、`良好 ≥0.75`、`一般 ≥0.55`、`较差 <0.55`。
-
-两点口径说明：
-
-- **近似词按半分计入**：阿拉伯语形近词（如 `الرحمن` / `الرحيم`）出错时通常读音相近而非完全跑偏，
-  直接算错会低估可懂度，算对又会高估，故取半分；
-- **覆盖率与准确率同时看**：只念了一小段时覆盖率低但准确率可能很高，乱识别时准确率低，
-  F1 把两者拉平，避免单看一个指标得出相反结论。
-
-### 原文来源
-
-按优先级两条（见 `reference_text.dart`），页面顶部会显示当前用的是哪一份：
-
-1. **设备文件覆盖**（换语料不必重新构建，推送后点右上角刷新即可生效）：
-   见 [docs/android-device.md](docs/android-device.md)；
-2. **内置资产** `assets/quran_reference/reference_text.txt`（随包发布，设备文件缺失时的回退）。
+- 判据是**有没有匹配到节**；`candidate`（有明确候选、仅可信度未达确认门槛）同样走译本查表，
+  不因为状态是「候选」就退化成机翻；
+- 半节命中译本时，落库 `inputScope = fullVerseContext`，界面标注「整节译文（上下文）」，
+  不冒充该片段的精确译文；
+- 译本按语言**按需加载并只缓存当前语言**（62 种语言合计约 89 MB，不能全部常驻）；
+- ML Kit 机器翻译是**显式白名单**（33 种语言）；未覆盖的语言仍可用译本查表，
+  只是未匹配片段无法机翻，界面如实提示；
+- 缓存键 = 输入哈希 + corpusId + corpusVersion + 目标语言 + 提供方 + 引擎代号 + 预处理版本。
 
 ## 快速开始
 
@@ -247,13 +114,13 @@ adb shell run-as com.llvision.quran_offline_demo cp "/data/local/tmp/我的朗�
 
 | 平台 | 要求 |
 |------|------|
-| 通用 | Flutter 3.41+（CI 固定 3.41.8）、Dart SDK ^3.11.5 |
-| Android | Android SDK 36、JDK 17、AGP 默认 NDK |
-| iOS | Xcode 26+、CocoaPods 1.16+、部署目标 iOS 15.1（见 [docs/ios.md](docs/ios.md)） |
+| 通用 | Flutter 3.41+（CI 固定 3.41.8）、Dart SDK `^3.11.5` |
+| Android | Android SDK（compileSdk 随 Flutter）、JDK 17、NDK `29.0.14206865`、minSdk 26 |
+| iOS | Xcode 26+、CocoaPods 1.16+、部署目标 **iOS 15.5**（详见 [iOS 平台说明](docs/platform-ios.md)） |
 
 ### 1. 获取模型与数据
 
-模型与大数据表不入版本库，需自行获取：
+**模型、词表与旧库数据表不入版本库**，需自行下载：
 
 ```bash
 # 下载原版模型与数据表（含 sha256 校验）
@@ -263,7 +130,17 @@ bash tools/quran_offline/download_assets.sh
 tools/quran_offline/.venv/bin/python tools/quran_offline/convert_for_ort122.py
 ```
 
-`sample_*.wav` 不由下载脚本提供，需自行准备（命名 `sample_SSSAAA.wav` 放入 `assets/quran_offline/`）。
+内置语料（语料校核用）同样不入版本库：
+
+```bash
+bash tools/quran_offline/download_corpus.sh
+```
+
+`:warning:` `sample_*.wav`（内置单节样本）不由任何脚本提供，需自行准备并按
+`sample_SSSAAA.wav` 命名放入 `assets/quran_offline/`，否则开发诊断页的内置样本自测会显示失败。
+
+广播功能的**全经语料与译本已入版本库**（`assets/broadcast_quran/full/`），
+无需额外下载。仅在需要重建时才运行构建脚本，见 [资产与脚本](#资产与脚本)。
 
 ### 2. 运行
 
@@ -272,34 +149,32 @@ flutter pub get
 flutter run                   # 需要真机或模拟器（麦克风）
 ```
 
+首次启动会加载全经索引（13 MB 级 token 表）、建库并加载 124.6 MB 声学模型，
+约需数秒；模型会复制到应用私有目录缓存，后续启动复用。
+
 使用步骤：
 
-1. 进入页面即自动加载经文库（6236 节 + 词表 + span 表）与 130 MB 声学模型
-   （首次会把模型复制到应用私有目录，后续启动复用缓存）；
-2. 加载完成后自动跑一遍**内置样本验证**：逐条读取 `sample_*.wav` 走完整链路，
-   日志输出「期望 vs 实际 / 命中与否 / 召回数 / 耗时」，末尾汇总命中率；
-3. 点「开始识别」诵读，主区实时渲染识别到的标准经文，章节栏显示章节、置信度、声学分与词进度；
-   静音 1.5 s 或手动停止时做一次收尾识别，右上角「重置」清空本轮状态；
-4. 结束后看日志的 `比对预览`，点右上角比对图标进入逐词对照页。
+1. 启动 → 引导页初始化（独立经文库 / 数据库 / ASR 模型）→ 进入首页；
+2. 选择目标语言（可选），点「准备语言包」按需下载 ML Kit 语言包（仅机器翻译需要）；
+3. 点「开始识别」，把设备放在广播/诵读声源附近；
+4. 三栏随识别刷新；一句结束（静音约 1.2 s 或超过 30 s）后自动落库；
+5. 点右上角「记录 N」查看历史，进入详情可看逐词比对与指标，或追加另一语言译本。
 
 ## 模型与数据
 
-来源 [yazinsai/tilawa](https://github.com/yazinsai/tilawa) v0.2.0（SDK MIT；模型 CC-BY-4.0，
-基座 `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`）。
+### 声学模型
+
+来自 [yazinsai/tilawa](https://github.com/yazinsai/tilawa) v0.2.0
+（SDK MIT；模型 CC-BY-4.0，基座 `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`）。
 
 | 文件 | 体积 | 说明 |
 |------|------|------|
-| `fastconformer_full_mixed.onnx` | 88 MB | 原版：FastConformer，int4 MatMul + int8 Conv 混合量化，含 57 个 `ConvInteger` 节点 |
-| `fastconformer_full_mixed_ort122.onnx` | 130 MB | **移动端实际加载**：由上一行数学等价改造而来，供 ORT 1.22 使用 |
-| `quran_ctc_tokens.json` | 12 MB | span 表，键 `surah:ayahStart:ayahEnd`，值为该跨度 token 序列 |
-| `quran.json` | 3 MB | 6236 节经文（`text_uthmani` 带音标 / `text_clean` 归一化） |
-| `vocab.json` | 21 KB | 1025 个 token，最大 id 为 blank |
-| `sample_*.wav` | 0.1–1.7 MB | 官方测试样本（文件名 `SSSAAA` 即标准答案），供内置批量验证 |
+| `fastconformer_full_mixed.onnx` | 约 84 MB | 原版：FastConformer，int4 MatMul + int8 Conv 混合量化，含 57 个 `ConvInteger` 节点 |
+| `fastconformer_full_mixed_ort122.onnx` | 约 124.6 MB | **移动端实际加载**：由上一行数学等价改造而来，供 ORT 1.22 使用 |
+| `vocab.json` | 约 21 KB | 1025 个 token，最大 id 为 blank（广播与旧 Demo 共用） |
 
-### 为什么需要两版模型
-
-`ConvInteger`（int8 量化卷积）只有较新版本的 ORT CPU EP 实现，而移动端可用的
-`onnxruntime-android` / `onnxruntime-objc` 当时最新为 1.22.0，加载原模型会报
+**为什么需要两版模型**：`ConvInteger`（int8 量化卷积）只有较新版本的 ORT CPU EP 实现，
+而移动端可用的 `onnxruntime-android` / `onnxruntime-objc` 为 1.22.0，加载原模型会报
 `NOT_IMPLEMENTED: Could not find an implementation for ConvInteger(10)`。
 
 `tools/quran_offline/convert_for_ort122.py` 做**数学等价**改造：
@@ -310,219 +185,308 @@ x_q → ConvInteger(x_q, w_q, x_zp, w_zp) → Cast → Mul(·, x_scale*w_scale)
 x_q → DequantizeLinear(x_q, x_scale, x_zp) → Conv(x_dq, w_fp32)
 ```
 
-代价是该 57 个卷积的权重由 int8 变 float32（模型 88 MB → 130 MB，推理走 FP32 卷积），
-收益是模型能在移动端可用的 ORT 版本上运行。等价性由 `verify_conversion.py` 对比两版模型输出验证
-（逐帧 argmax 一致率 100%）。
+代价是这 57 个卷积的权重由 int8 变为 float32（88 MB → 130 MB，推理走 FP32 卷积），
+收益是模型能在移动端可用的 ORT 版本上运行。等价性由 `verify_conversion.py` 对比两版模型输出
+验证（逐帧 argmax 一致率 100%）。
 
-> 经文库的 token 表有个坑：`s:1:N`（N≥2）不含太斯米前缀，而单节序列可能含，
-> 真实音频则不一定有太斯米；`QuranMatcher._scoreTokens()` 会做「剥离太斯米前缀再打分，取更优」。
+两端原生桥都锁定 **ONNX Runtime 1.22.0**：跨平台数值差异会翻转 CTC 跨度判定，
+版本必须对齐（见 [已知限制](#已知限制)）。
 
-## 流式策略
+### 广播语料库（全经，入版本库）
 
-`QuranStreamingSession`（工程化简版，便于移动端稳定运行）：
+`assets/broadcast_quran/full/`：
 
-| 机制 | 参数（默认） | 作用 |
-|------|--------------|------|
-| 能量 VAD 门控 | `speechSnrRatio=2.5`、`speechQuietFloorRatio=2.0`、`speechRmsThreshold=0.004` | 三层判据（与绝对电平解耦）：① 峰值 ≥ 最近 2 s 帧能量中位数 × 2.5；② 峰值 ≥ 会话内「最安静窗口本底」× 2.0；③ 峰值 ≥ 0.004 的极低电平兜底。只看最近 2 s、20 ms 帧，比值判据适应不同底噪，纯静音与稳态噪声都不产出臆测结果 |
-| 触发间隔 | `triggerSeconds=0.75` | 每累积约 0.75 s 尝试一次识别 |
-| 窗口范围 | `minWindowSeconds=1.2`、`maxWindowSeconds=15` | 太短的窗口不识别；识别时只取最近 15 s |
-| 静音收尾 | `silenceRmsThreshold=0.012`、`finalSilenceSeconds=1.5` | 连续静音 1.5 s 判定一段诵读结束 |
-| 稳定锁定 | `stableRounds=2` | 连续多轮命中同一章节才标记为「稳定」，避免逐帧抖动 |
-| 词级进度 | `QuranWordProgress` | 对候选序列做**帧级强制对齐**（`CtcScorer.alignFrames`），把被 CTC 挤到音频内容区之后的 token 判为「尚未念到」，取前缀词数即已读词数（`estimateReadWords`，不依赖容差常数）；序列帧数不足时回退到「前缀 CTC 打分 + 容差」（`estimateReadWordsByPrefix`） |
-| 召回 + 精排 | `topK=64`、`maxSpan=4`、`spanPenalty=0.1` | 召回候选数、最大连读跨度、跨度惩罚系数（打分按帧归一化后的重标定值，见 `tools/quran_offline/tune_span_penalty.py`） |
-| 已确认进度 | `commitWordRatio=0.6` | 稳定命中且已读词达该比例时提交一节到 `committedSequence`，使长诵读进度单调推进（同一节不重复提交） |
-| 窗口推进 | `advanceWindowOnCommit=true`、`windowOverlapSeconds=1.0` | 提交已确认章节后，按帧级对齐的已读结束位置裁掉窗口前部音频（保留 1.0 s 重叠），使识别围绕当前位置进行而不是一直覆盖整段历史；事件带 `advancedSeconds` 便于观察 |
+| 文件 | 体积 | 说明 |
+|------|------|------|
+| `manifest.json` | 1.3 KB | corpusId / 版本 / 上游 SHA-256 / 许可 / 节数 / token 表校验 |
+| `NOTICE.txt` | 1.1 KB | Tanzil 版权区块（CC-BY 3.0） |
+| `quran.json` | 1.9 MB | 全经 6236 节原文（`sourceText` 逐字保留上游文本）+ 114 章章名元数据 |
+| `verse_ctc_tokens.json` | 42.9 MB | 本仓库生成的 CTC token 表，键 `surah:ayahStart:ayahEnd`，含 46,752 条跨度（`maxSpan = 8`） |
+| `translations/index.json` + 62 个译本 | 约 89 MB | QuranEnc 授权人工译本目录与正文（每语言约 1.4 MB） |
+
+**token 表的口径偏差必须说清楚**：上游 `quran_ctc_tokens.json` 的 token 分数未公开，
+无法逐 token 复现。本仓库用**确定性分词**（最少 token 数，同级取更长片段）从同一词表重新生成，
+单节逐 token 与官方表的一致率约 21%。生成的序列 round-trip 全部正确
+（解码回原文逐字相同），但**排序分数的绝对值口径与旧库不同**，因此广播侧的跨度惩罚与
+可信度阈值是**独立标定**的，不能沿用旧库常数。
+
+**章首太斯米前缀**由文本自动判定（不硬编码）：114 章中 112 章带前缀，
+`1:1`（太斯米本身就是该节）与 `9:1`（忏悔章无太斯米）不带，与传统一致。
+解析时只在「前缀匹配且后面还有词」的情况下剥离，`1:1` 不剥离。
+
+**为什么要独立成库**：广播功能只检索自己的全经语料，
+**不读取旧 Demo 的 `assets/quran_offline/quran.json` / `quran_ctc_tokens.json`**，
+也不在任何情况下回退过去。这一点由自动化测试用「记录全部资产请求的 bundle」断言，
+而不是靠代码约定。
+
+### 旧 Demo 语料库（不入版本库）
+
+`assets/quran_offline/`：旧经文库 `quran.json`（3 MB / 6236 节）、
+`quran_ctc_tokens.json`（11.7 MB span 表，供旧流式链路）、
+5 个 `sample_*.wav`、`corpus/`（3 段多节连续诵读音 + `manifest.json`）。
+
+`assets/quran_reference/reference_text.txt`（3.2 KB）是旧比对页的内置参考答案，入版本库，可由设备文件覆盖。
+
+### 上游归档与音频
+
+`resources/broadcast_quran/`：
+
+- `tanzil_1_1/`：Tanzil 全经原文快照（`quran-uthmani.txt`，SHA-256 已记入 manifest）与版权说明，入版本库；
+- `manifest.json`：文本快照与全经音频的来源、字节数、逐章 SHA-256 记录；
+- `full_recitation/`：Alafasy 全经整章 MP3（114 章，约 1.7 GB），**不入版本库**，
+  按 `resources/broadcast_quran/manifest.json` 的清单重新获取。
+
+## 资产与脚本
+
+### 语料与译本构建（`tools/broadcast_quran/`）
+
+```bash
+# 从 Tanzil 快照生成全经语料 JSON + NOTICE + manifest 的取值（--check 只统计不写文件）
+python3 tools/broadcast_quran/build_full_corpus.py --check
+python3 tools/broadcast_quran/build_full_corpus.py
+
+# 生成 CTC token 表（跨度上限 8；--verify-legacy 可与官方表比对一致率）
+python3 tools/broadcast_quran/generate_verse_tokens.py \
+  --verses assets/broadcast_quran/full/quran.json \
+  --vocab assets/quran_offline/vocab.json \
+  --output assets/broadcast_quran/full/verse_ctc_tokens.json \
+  --max-span 8
+
+# 下载 62 种语言译本（逐个校验 license.status == granted，未授权即拒绝打包）
+python3 tools/broadcast_quran/fetch_translations.py --check
+python3 tools/broadcast_quran/fetch_translations.py
+```
+
+### 模型与旧库工具（`tools/quran_offline/`）
+
+| 脚本 | 用途 |
+|------|------|
+| `download_assets.sh` | 下载原版模型与数据表（含 sha256 校验） |
+| `download_corpus.sh` | 从 Quran.com CDN 取逐节诵读、拼成 16 kHz 单声道 WAV（可配 `RECITER=` / `RANGES=` / `INCLUDES_BISMILLAH=`） |
+| `convert_for_ort122.py` | 把原版模型改造为 ORT 1.22 可加载版本（`--check` 只校验） |
+| `verify_conversion.py` | 对比改造前后模型输出，验证数学等价性 |
+| `verify_corpus.py` | 用官方测试语料（文件名即答案）在声学层验证准确率 |
+| `tune_span_penalty.py` | 跨度惩罚标定与**门禁**：`--check` 从 Dart 源码读取当前惩罚值，校验 5 条官方样本的冠军是否都等于正确单节、惩罚是否仍在允许上界内，不符即非零退出 |
+| `check_sample.py` / `diag_ctc.py` / `diag_ayah_isolated.py` | 长音频分段识别、候选 CTC 分数对比、逐节孤立上限诊断 |
+| `host_ort_server.py` | 本机 ONNX Runtime HTTP 服务（只监听 `127.0.0.1`），供 `tool/` 下的 Dart 基准脚本使用 |
+| `poc_transcribe.py` / `poc_match.py` | 最早的 P0/P1 链路验证（依赖原版模型） |
+| `reference/*.ts` | Tilawa 侧 TypeScript 参考实现，仅用于对照 Dart 侧语义 |
+
+### 基准与标定（`tool/`）
+
+下列脚本需要**本机 host ORT 服务 + 真实音频**，CI 不覆盖：
+
+| 脚本 | 运行方式 | 用途 |
+|------|----------|------|
+| `broadcast_end_to_end_test.dart` | `flutter test`（需 `QURAN_E2E_AUDIO_DIR` / `QURAN_E2E_CASES` / `QURAN_E2E_OUT`） | 广播端到端：真实音频 → 转写 → 全经匹配 → 译本 |
+| `broadcast_span_tuning_test.dart` | `flutter test`（需 `QURAN_TUNE_WAV` / `QURAN_TUNE_OUT`） | 跨度参数标定（25 s 窗口 / 8 s 步长） |
+| `diagnose_match_test.dart` | `flutter test`（需 `QURAN_DIAG_AUDIO` 等） | 单窗口召回 / 精排诊断 |
+| `offline_benchmark_test.dart` | `flutter test`（需 `QURAN_BENCH_OUT`） | 三段内置语料的离线实际 ASR 基准，任一 F1/P/R < 0.9 即失败 |
+| `stream_benchmark_test.dart` | `flutter test`（需 `QURAN_BENCH_OUT`；`QURAN_BENCH_ADVANCE=false` 可关闭窗口推进做消融） | 旧流式链路基准 |
+| `tilawa_compare_metrics.dart` | `dart run` | 用同一套 `WordAlignment` 口径对比 Tilawa 官方包结果 |
+| `generate_arabic_forms.py` | `python3`（`--check` 检查漂移） | 生成 `lib/quran_offline/arabic_presentation_forms.dart` |
+
+上述需要推理服务的脚本默认连 `http://127.0.0.1:8765`，可用 `QURAN_ORT_URL` 覆盖。
+`host_ort_server.py` 只监听 `127.0.0.1`，模型与音频都不上传。
 
 ## 测试与 CI
 
 ```bash
 flutter analyze   # 静态分析
-flutter test      # 运行当前全部单元测试与页面测试
+flutter test      # 24 个测试文件 / 207 个用例
 ```
 
-改动**打分口径、跨度惩罚或更换模型**后，除单测外还需跑一次真机/基准标定门禁（需要模型与官方语料，
-CI 不覆盖）：
+测试**不依赖**真实模型资产：用例通过 `FakeAssetBundle` 注入最小化内存资产、
+通过 `ScriptedOrtRunner` 注入合成声学证据、通过 `buildSpeechLikeSamples` 生成可驱动 VAD 的
+类语音信号，因此 clone 后无需下载任何模型即可跑通全链路
+（真机麦克风与模型推理仍需 `flutter run` 验证）。
 
-```bash
-tools/quran_offline/.venv122/bin/python tools/quran_offline/tune_span_penalty.py --check
-```
-
-它会从 Dart 源码读取当前 `defaultSpanPenalty`，校验 5 条官方样本是否都命中正确单节、惩罚是否仍在
-允许上界内（当前 0.1 < 上界 0.335），不符即非零退出。
-
-测试**不依赖** `assets/quran_offline/` 下的真实资产：用例通过 `FakeAssetBundle` 注入最小化的
-内存资产、通过 `ScriptedOrtRunner` 注入合成声学证据、通过 `buildSpeechLikeSamples` 生成可驱动
-VAD 的类语音信号，因此 clone 后无需下载任何模型资产即可跑通全链路（真机麦克风与模型推理仍需
-`flutter run` 验证）。
+广播侧 6 个测试文件**直接读取已入库的全经语料与译本**
+（`assets/broadcast_quran/full/**`），用于校验语料完整性、译本目录与查表。
 
 | 测试文件 | 覆盖内容 |
 |----------|----------|
-| `quran_text_test.dart` | 阿拉伯语归一化（音标/Tatweel/字母变体/BOM/Presentation Forms-A/B）、相似度与片段相似度 |
+| `broadcast_corpus_test.dart` | 全经语料库完整性、章节索引、章首前缀判定，以及「只读新库、不请求旧库资产」的资产记录断言 |
+| `broadcast_match_test.dart` | 召回 / CTC 精排 / 候选裁决 / 太斯米歧义 / 极短节抑制 / 阈值分带 |
+| `broadcast_repository_test.dart` | SQLite：写入幂等、分页、删除与清空、迟到译文防护、任务重启恢复 |
+| `broadcast_session_test.dart` | 会话状态机、断句、终稿队列、落库与翻译调度 |
+| `broadcast_translation_test.dart` | 来源策略（三路径）、缓存键、重试与失败分类 |
+| `broadcast_translation_catalog_test.dart` | 62 语言译本目录、节数一致性、语言注册顺序与查表 |
+| `quran_text_test.dart` | 阿拉伯语归一化（音标 / Tatweel / 字母变体 / BOM / Presentation Forms-A、B）、相似度与片段相似度 |
 | `ctc_decoder_test.dart` | 贪心 CTC 解码、相邻重复折叠、blank 处理、词边界下标 |
 | `ctc_scorer_test.dart` | 前向后向对数似然、可行性下界、最长稳定前缀选择 |
 | `quran_word_progress_test.dart` | 词边界切分、已读词估算、词表与 token 词组对齐 |
-| `quran_assets_test.dart` | 词表/经文/span 表解析、排序索引、缓存 |
+| `quran_assets_test.dart` | 旧库词表/经文/span 表解析、排序索引、缓存 |
 | `quran_recognizer_test.dart` | 「解码 → 召回 → 精排」端到端、VAD 门控与流式会话行为 |
 | `word_alignment_test.dart` | 词级对齐（漏词不连带判错）、一致/近似/错配/缺失/多余判定、覆盖率与 F1、结论分档 |
 | `word_error_rate_test.dart` | 严格词错误率（替换/缺失/多余）与空参考边界 |
-| `transcript_stitcher_test.dart` | 逐窗结果的最长重叠去重、整段已包含不重复追加、归一化后比较 |
+| `transcript_stitcher_test.dart` | 逐窗结果的最长重叠去重、整段已包含不重复追加 |
 | `timed_transcript_test.dart` | 带时间戳重叠窗口的词级拼接、边界去重与尾词保留 |
 | `offline_transcriber_test.dart` | 声学暂停分段、长段有界回退、静音/空音频、取消与实际解码拼接 |
 | `reference_text_test.dart` | 原文来源优先级（设备文件 → 内置资产）、空白内容回退、双来源缺失报错 |
-| `quran_compare_page_test.dart` | 比对页左右两栏渲染、缺失侧占位、指标与结论、原文加载失败提示 |
-| `corpus_audio_test.dart` | WAV 解码、非 44 字节头（夹其它块）仍可解、格式不符的报错与转码提示、时长换算 |
-| `corpus_catalog_test.dart` | 官方语料始终在列、检测到自定义音频时追加条目、两条候选路径 |
+| `quran_compare_page_test.dart` | 比对页左右两栏渲染、缺失侧占位、指标与结论 |
+| `corpus_audio_test.dart` | WAV 解码、非 44 字节头（夹其它块）仍可解、格式不符的报错与转码提示 |
+| `corpus_catalog_test.dart` | 内置语料始终在列、检测到自定义音频时追加条目 |
 | `corpus_runner_test.dart` | 旧流式诊断的灌音事件与章节重建稿、命中判定及取消 |
 | `corpus_verify_page_test.dart` | 默认离线校核、流式诊断切换、完成后进入比对页与坏音频提示 |
-| `widget_test.dart` | 页面首帧、「加载模型 → 内置样本验证 → 就绪」流程 |
-| `support/quran_test_fixtures.dart` | 夹具：内存资产包、脚本化推理桥、合成证据与类语音信号 |
+| `widget_test.dart` | 开发诊断页首帧与「加载模型 → 内置样本验证 → 就绪」流程 |
+| `support/*.dart` | 夹具：内存资产包、脚本化推理桥、合成证据与类语音信号、WAV 构造 |
 
-CI 定义见 `.github/workflows/ci.yml`，两个 Job：
+CI 定义见 `.github/workflows/ci.yml`，三个 Job：
 
 | Job | 内容 |
 |-----|------|
 | 静态分析 + 单元测试 | `flutter analyze` → `flutter test --coverage`，上传 `lcov.info` |
-| 构建 Android APK | 缓存/下载模型资产 → `flutter build apk --debug`，上传 APK 产物 |
+| 构建 Android APK | 缓存/下载模型资产（约 103 MB）→ `flutter build apk --debug`，上传 APK 产物 |
+| 构建 iOS（模拟器） | 缓存 CocoaPods → `flutter build ios --simulator --debug`，只验证编译链接 |
 
 > CI 只覆盖 `download_assets.sh` 提供的资产，**不含** `*_ort122.onnx` 与 `sample_*.wav`，
-> 因此 CI 产出的 APK 仅用于验证编译链路，内置样本验证与真实识别需在本地准备好全部资产。
+> 因此 CI 产出的 APK 仅用于验证编译链路，真实识别需在本地准备全部资产。
 
 ## 项目结构
 
 ```
 lib/
-├── main.dart
-├── broadcast/                                       广播识别（产品首页）
-│   ├── broadcast_services.dart                      依赖组装与生命周期
+├── main.dart                                          应用入口 + 引导页（首页 = 广播识别）
+├── broadcast/                                         广播识别（产品功能）
+│   ├── broadcast_services.dart                        依赖组装与生命周期（应用级单实例）
 │   ├── application/
-│   │   ├── microphone_source.dart                   16 kHz 单声道收音适配
-│   │   ├── utterance_segmenter.dart                 断句状态机（能量 + 静音时长）
-│   │   ├── broadcast_transcriber.dart               片段实际 ASR（保留声学证据）
-│   │   ├── quran_match_service.dart                 新库匹配 + 候选裁决 + 指标
-│   │   ├── translation_coordinator.dart             来源策略 / 缓存 / 重试
-│   │   └── broadcast_session_controller.dart        收音 → 断句 → 终稿 → 落库
+│   │   ├── microphone_source.dart                     16 kHz 单声道收音适配
+│   │   ├── utterance_segmenter.dart                   断句状态机（本底自适应能量 + 静音时长）
+│   │   ├── broadcast_transcriber.dart                 片段实际 ASR（保留声学证据供匹配复用）
+│   │   ├── quran_match_service.dart                   全经匹配 + 候选裁决 + 指标与阈值
+│   │   ├── translation_coordinator.dart               来源策略 / 缓存 / 重试 / 任务队列
+│   │   └── broadcast_session_controller.dart          收音 → 断句 → 预览 → 终稿 → 落库
 │   ├── data/
-│   │   ├── app_database.dart                        SQLite 建库与迁移
-│   │   ├── record_repository.dart                   事务保存 / 分页 / 幂等 / 恢复
-│   │   ├── broadcast_corpus.dart                    全经 6236 节 + 独立索引（数据驱动）
-│   │   └── translation_catalog.dart                 62 语言译本目录与按需加载
-│   ├── domain/utterance_record.dart                 三类文本 + 指标 + 译文模型
+│   │   ├── app_database.dart                          SQLite 建库与迁移（schemaVersion 1）
+│   │   ├── record_repository.dart                     事务保存 / 分页 / 幂等 / 重启恢复 / 缓存
+│   │   ├── broadcast_corpus.dart                      全经语料库（数据驱动，含独立索引）
+│   │   └── translation_catalog.dart                   62 语言译本目录与按需查表
+│   ├── domain/utterance_record.dart                   三类文本 + 指标 + 译文模型与全部状态枚举
 │   ├── translation/
-│   │   ├── offline_translation_engine.dart          引擎契约与失败分类
-│   │   ├── mlkit_translation_engine.dart            ML Kit 端侧翻译适配器
-│   │   └── verse_translation_repository.dart        校订译本接口（当前为空实现）
-│   └── ui/                                          首页三栏 / 历史 / 详情
-└── quran_offline/
-    ├── arabic_presentation_forms.dart Unicode 15.0 Presentation Forms 兼容分解表
-    ├── quran_text.dart              阿拉伯语归一化与相似度
-    ├── ctc_decoder.dart             贪心 CTC 解码
-    ├── ctc_scorer.dart              前向后向对数似然 + 稳定前缀
-    ├── quran_word_progress.dart     词边界切分 + 已读词估算（提词器）
-    ├── quran_assets.dart            经文库 / 词表 / span 表加载
-    ├── quran_matcher.dart           召回 + 精排 + 置信度
-    ├── ort_runner.dart              推理桥接口（平台通道）
-    ├── quran_recognizer.dart        一次性识别 + 流式会话（含 VAD 门控）
-    ├── transcript_stitcher.dart     转写稿增量拼接（按最长词级重叠去重）
-    ├── timed_transcript.dart        带时间戳窗口的实际 ASR 转写拼接
-    ├── offline_transcriber.dart     声学暂停分段与有界离线实际 ASR
-    ├── word_alignment.dart          词级对齐、判定阈值与比对指标
-    ├── word_error_rate.dart         严格词错误率
-    ├── reference_text.dart          比对原文加载（设备文件 / 内置资产）
-    ├── quran_compare_page.dart      原文 / 转写逐词对照页
-    ├── corpus_audio.dart            语料 WAV 解码与格式校验
-    ├── corpus_catalog.dart          内置连续语料清单 + 设备自定义语料
-    ├── corpus_runner.dart           旧流式章节重建诊断（按实时节奏灌音）
-    ├── corpus_verify_page.dart      语料页（默认离线实际 ASR，可切旧流式诊断）
-    └── quran_offline_demo_page.dart Demo 界面（Streaming 经文主区 / 可切换提词器 / 内置样本验证 / 两个入口）
-android/app/src/main/java/.../QuranOrtBridge.java   ONNX Runtime 桥
-android/app/src/main/kotlin/.../MainActivity.kt     通道注册
+│   │   ├── offline_translation_engine.dart            引擎契约与失败分类
+│   │   ├── mlkit_translation_engine.dart              ML Kit 端侧翻译适配器（33 语言白名单）
+│   │   └── verse_translation_repository.dart          校订译本仓储接口与空实现
+│   └── ui/
+│       ├── broadcast_home_page.dart                   三栏首页
+│       ├── record_list_page.dart                      历史列表（分页 / 筛选 / 清空）
+│       ├── record_detail_page.dart                    详情（三类文本 / 指标 / 逐词比对 / 追加语言）
+│       └── widgets/text_section_card.dart             文本卡片（RTL 与徽标）
+└── quran_offline/                                     旧 Demo 与共享算法层
+    ├── arabic_presentation_forms.dart                 Unicode 15.0 Presentation Forms 兼容分解表
+    ├── quran_text.dart                                阿拉伯语归一化与相似度
+    ├── ctc_decoder.dart                               贪心 CTC 解码
+    ├── ctc_scorer.dart                                前向后向对数似然 + 稳定前缀
+    ├── quran_word_progress.dart                       词边界切分 + 已读词估算（提词器）
+    ├── quran_assets.dart                              旧经文库 / 词表 / span 表加载 + VerseIndex
+    ├── quran_matcher.dart                             召回 + 精排 + 置信度（两库共用）
+    ├── ort_runner.dart                                推理桥接口（平台通道）
+    ├── quran_recognizer.dart                          一次性识别 + 流式会话（含 VAD 门控）
+    ├── transcript_stitcher.dart                       转写稿增量拼接（按最长词级重叠去重）
+    ├── timed_transcript.dart                          带时间戳窗口的实际 ASR 转写拼接
+    ├── offline_transcriber.dart                       声学暂停分段与有界离线实际 ASR
+    ├── offline_corpus_check.dart                      无头端侧验收（不进 UI）
+    ├── word_alignment.dart                            词级对齐、判定阈值与比对指标
+    ├── word_error_rate.dart                           严格词错误率
+    ├── reference_text.dart                            比对原文加载（设备文件 / 内置资产）
+    ├── quran_compare_page.dart                        原文 / 转写逐词对照页
+    ├── corpus_audio.dart                              语料 WAV 解码与格式校验
+    ├── corpus_catalog.dart                            内置连续语料清单 + 设备自定义语料
+    ├── corpus_runner.dart                             旧流式章节重建诊断（按实时节奏灌音）
+    ├── corpus_verify_page.dart                        语料页（默认离线实际 ASR，可切旧流式诊断）
+    └── quran_offline_demo_page.dart                   开发诊断主页面
+android/app/src/main/java/com/llvision/quran_offline_demo/QuranOrtBridge.java   ONNX Runtime 桥
+android/app/src/main/kotlin/com/llvision/quran_offline_demo/MainActivity.kt     通道注册
 ios/Runner/QuranOrtBridge.{h,m}                     ONNX Runtime 桥
 ios/Runner/AppDelegate.swift                        通道注册
 test/                                               单元测试与页面冒烟测试
-assets/quran_offline/                               模型与数据资产（不入版本库）
-assets/quran_offline/corpus/                        语料验证用的多节连续诵读 + manifest.json
-                                                    （download_corpus.sh 生成，不入版本库）
-assets/quran_reference/                             比对用原文（约 3 KB，入版本库）
-assets/broadcast_quran/tanzil_1_1/                  广播功能独立新库：41 节原文 + 生成的
-                                                    CTC token 表 + manifest（入版本库，无音频）
-resources/broadcast_quran/                          新库上游归档与音频候选（未接入安装包）
-tools/quran_offline/                                资产下载、模型改造与 Python 验证脚本
-tools/broadcast_quran/                              全经语料构建、CTC token 表生成、62 语言译本下载
-docs/                                               验证记录、平台联调说明
-.github/workflows/ci.yml                            静态分析 + 测试 + APK 构建
+assets/broadcast_quran/full/                        广播全经语料 + 62 语言译本（入版本库）
+assets/quran_offline/                               模型与旧库资产（不入版本库）
+assets/quran_offline/corpus/                        语料校核用的多节连续诵读（不入版本库）
+assets/quran_reference/                             旧比对页原文（入版本库）
+resources/broadcast_quran/                          上游归档 + 全经音频清单（音频不入版本库）
+tools/broadcast_quran/                              全经语料构建、token 表生成、译本下载
+tools/quran_offline/                                模型改造、资产下载与 Python 验证脚本
+tool/                                               Dart 基准与标定脚本（flutter test / dart run）
+docs/                                               架构、匹配、验收与平台文档
+.github/workflows/ci.yml                            静态分析 + 测试 + APK 构建 + iOS 编译
 ```
+
+## 真机验收记录
+
+> **状态：待补充。**
+> 本轮真机测试完成后回填到 [真机验收记录](docs/device-verification.md)，
+> 该文档已预留方法、命令与记录表结构，只差实测数据。
+> 在数据补齐之前，**广播链路不得声称已验收**。
+
+| 项目 | 状态 |
+|------|------|
+| 全经连续播放（≥30 分钟） | 待补充 |
+| 多诵读者 / 多距离 / 多底噪 | 待补充 |
+| 库外内容负样本集 | 待补充 |
+| 端到端延迟 P95 | 待补充 |
+| iOS 真机广播链路 | 待补充 |
+
+已有可复现证据（主机端到端、三段内置语料离线 ASR）见
+[经文匹配与指标](docs/matching.md) 与 [离线语料准确度](docs/offline-accuracy.md)。
 
 ## 已知限制
 
-- **`112:1` 跨度判定（已修复）**：内置样本 `sample_112001.wav`（`قل هو الله احد`）在 ARM 设备上
-  曾被判成 `112:1-3`。根因不是「听错」（转写文本完全正确），而是打分口径：`CtcScorer` 以 token 数
-  归一化，token 越多分母越大，多节连读会系统性占优，而设备端与 x86 的浮点差异把这个偏好放大成
-  次序翻转。现改为**按帧数归一化**（同一段音频帧数是常数，各候选同口径），跨度惩罚随之重标定为
-  `0.1`（依据 `tools/quran_offline/tune_span_penalty.py`：官方 5 条样本下正确单节与最佳跨度扩展的
-  最小差距为 0.335）。修复后 Android 真机与 iOS 模拟器内置样本均为 **5/5**；按帧口径的跨平台数值
-  也高度一致（同一样本 ARM 与 x86 的分数差 <5%，旧口径下曾差 10 倍）。
-- **比对结果的上限受抓音质量影响（已改善）**：转写稿只包含 VAD 判定为「有语音」的窗口。原判据含
-  `speechRmsThreshold=0.03` 的固定下限，会把远场/低音量收音（实测 RMS 0.003~0.026）整段挡掉；
-  现改为三层判据（音频内信噪比 + 会话级最安静本底倍数 + 0.004 极低电平兜底），并加了「收音偏弱」
-  自检与比对页低覆盖率提示。判据有单测覆盖（弱语音通过 / 稳态噪声拒绝 / 静音拒绝），但**真机上的
-  弱信号效果尚未验证**（需设备）。
-- **流式仍为工程化简版（已补进度推进与窗口推进）**：新增「已确认章节」序列（稳定命中且读满 60% 词
-  时提交，同一节不重复提交、收尾不清空）与**窗口推进**（提交后按帧级对齐位置裁掉已读音频、保留
-  1.0 s 重叠），识别不再一直覆盖整段历史；与 Tilawa `tracker.ts` 的剩余差距是**帧级细粒度推进**
-  —— 当前只在提交节时前移窗口，未随每个词前移。
-- **模型体积**：移动端加载 130 MB 改造版模型（124.6 MiB），debug APK 约 300 MB；
-  正式交付需按需下载模型或只打单 ABI。
-- **提词器精度未定量评估**：已读词估算改为帧级强制对齐（不依赖容差常数；回退路径仍用
-  `defaultTolerance=0.35`），但高亮「滞后/超前」的量还没有按真人朗读实测；默认主区走整句样式，
-  提词器逻辑保留且有单元测试覆盖。
+- **广播链路的真机验收尚未完成（最重要的一条）**。首页三栏、全经匹配、SQLite 历史、
+  译本查表与机器翻译都已有单元测试与主机端到端证据，
+  但**尚未补齐真实「外放 → 空气 → 麦克风 → 断句 → 匹配 → 翻译」的完整验收矩阵**，
+  见上方「真机验收记录」。
+- **ML Kit 机器翻译未在真机运行过**：语言包需动态下载（不能随包分发），
+  端侧翻译模型依赖 Google Play 服务，无 GMS 设备的可用性未验证；
+  阿→中经英语中转，中文质量必须单独评估，不能用英文结果推定。
+- **iOS 模拟器不能跑广播功能**：ML Kit 的传递依赖声明不支持 arm64 模拟器，
+  iOS 侧只能真机验证（编译链接由 CI 覆盖）。
+- **62 种译本只在中文与英文上做过端到端验证**，其余 60 种仅校验了目录条目、
+  节数与查表命中，未做逐句语义抽检。
+- **严格词准确率不是 90%**：内置语料的容错 F1/P/R ≥ 0.95，但严格 WER 仍有约 14%–17%，
+  差异来自奥斯曼体与现代阿拉伯书写体、以及真实解码错误。两组指标口径不同，
+  不能把 F1 解读成严格逐词准确率。
+- **匹配阈值是独立标定的起点**：`spanPenalty = 0.1` 在真实整章音频上做过五档灵敏度
+  检验（结果相同），`maxSpan = 8` 由端到端真实音频暴露的「跨度不足」确定；
+  但标定素材是**单个诵读者 + 主机直连音频**，真机外放拾音下的确认与拒识行为
+  仍需与人工标注对照。
+- **预览路径未降配**：单条记录端到端约 4–5 s，预览匹配随片段增长可达 1.2 s，
+  理论上预览应使用更小的 `topK` / `maxSpan`，尚未在真机验证必要性。
+- **应用体积大**：包含 124.6 MB 模型 + 42.9 MB token 表 + 89 MB 译本，
+  debug APK 约 380 MB；正式交付需按需下载或只打单 ABI。
+- **旧 Demo 的流式链路仍是工程化简版**：实时路径的 VAD 音频内信噪比判据
+  （峰值 ≥ 中位数 × 2.5）隐含「窗口里既有朗读也有停顿」的前提，
+  一口气不停顿的长诵存在被挡风险；提词器的已读词估算改为帧级强制对齐后，
+  高亮滞后/超前的量还没有按真人朗读实测。详见 [旧 Demo 与流式链路](docs/legacy-demo.md)。
 - **置信度是启发式**：按「与次优的相对差距（15%）」映射，完美匹配与长窗口下会饱和到 1.00，
   仅用于界面提示，不参与判定。
-- **iOS 真机离线验证已通过**：iPhone 17 Pro 内置样本 5/5，三段离线语料 F1/P/R 与 Android 完全一致
-  （0.9583 / 0.9767 / 0.9672）；麦克风实采、实时跟踪与系统性性能测试仍未覆盖，见 [验收报告](docs/offline-ios-20260920.md)。
-- **模型与测试音频未入库**：模型、`sample_*.wav` 和 `assets/quran_offline/corpus/` 下的连续语料音频
-  都不进版本库。clone 后需分别准备模型/单节样本并运行 `download_corpus.sh`，否则相应验证会显示
-  「识别失败」或「不可用」。
-- **离线校核不能代替实时验收**：默认语料验证直接跑有界离线实际 ASR，主机三段真实音频已达到
-  容错 F1/P/R ≥0.9；Android、iOS 真机均已复现三条相同指标。它不覆盖麦克风收音、实时延迟、章节锁定和词进度，
-  这些仍需真机实测；关闭 Switch 后的旧流式诊断只用于章节匹配和窗口推进回归。
-- **自定义语料要求 WAV**：必须是 16 kHz / 单声道 / 16-bit PCM，mp3/其它采样率会在列表上标错
-  （附转码命令），暂不支持应用内解码压缩音频。
-- **旧流式诊断的短句误匹配**：短窗口上引擎会稳定地误认成别的短句（实测 `2:1`「الم」、
-  `1:3`「الرحمن الرحيم」反复出现），它们进转写稿后成为多余词，把 F1 从覆盖率水平拉下来；
-  根因是片段/前缀匹配的缺失（Tilawa 有 `JOINT_FRAGMENT_BLEND`、`JOINT_PREFIX_*` 那套处理），
-  尚未移植。旧章节重建口径下表现为「章节命中 25/29、整段全中 2/3」。此外，实时路径的 VAD
-  音频内信噪比判据（峰值 ≥ 中位数 × 2.5）隐含「窗口里既有朗读也有停顿」的前提，
-  实测连续朗读语料的该比值只有 1.3~2.0 —— 语料灌音已按「已知朗读」跳过该判据，
-  **实时路径仍按原判据**，真人一口气不停顿地长诵时存在被挡风险（未做此场景的真人实测）。
-- **广播功能尚未做真机验收（最重要的一条）**：新首页、独立三章库、SQLite 历史、ML Kit 翻译
-  全部只用合成声学证据与假引擎验证过（189 个测试、双端构建通过）。**没有任何一条真实
-  「外放 → 空气 → 麦克风 → 断句 → 匹配 → 翻译」的端到端记录**，实施方案里的广播验收矩阵
-  （≥30 分钟、≥3 位诵读者、库外负样本、P95 延迟）一项未跑。
-- **新库 CTC 排序阈值未标定**：上游 `quran_ctc_tokens.json` 的 token 分数未公开，新库 token 表
-  由本仓库的确定性分词生成（单节逐 token 与官方表一致率约 21%，round-trip 正确）。因此
-  `BroadcastMatchConfig` 的跨度惩罚与可信度阈值是**待标定起点**，不能当作已验收常数。
-- **ML Kit 翻译未在真机运行过**：语言包需动态下载（不能随包分发），端侧翻译模型依赖
-  Google Play 服务，无 GMS 设备的可用性未验证；阿→中经英语中转，中文质量必须单独评估。
-  另外 ML Kit 的传递依赖不支持 arm64 模拟器，**iOS 只能真机验证**。
-- **没有可分发的中英校订译本**：`curatedEdition` 路径目前恒为空实现，所有译文都标
-  `machineCanonical` / `machineAsr`；未获授权前不打包、不伪造译本 ID。
+- **模型与测试音频未入库**：模型、`sample_*.wav` 与内置语料 WAV 都不进版本库，
+  clone 后需分别准备，否则相应验证会显示「识别失败」或「不可用」。
+- **iOS 真机仅覆盖离线语料路径**：三段内置语料的 F1/P/R 与 Android 完全一致，
+  但麦克风实采与实时跟踪仍未在 iOS 上验证。
 
 ## 更多文档
 
 | 文档 | 内容 |
 |------|------|
-| [docs/broadcast-baseline-20260921.md](docs/broadcast-baseline-20260921.md) | 广播识别当前基线：主机/真机匹配指标、端侧性能、翻译质量样本与回归对照方法 |
-| [docs/broadcast-implementation-20260921.md](docs/broadcast-implementation-20260921.md) | 广播识别与离线翻译的实际交付内容、可复现验证命令与未验收项 |
-| [docs/broadcast-transcription-translation-plan-20260920.md](docs/broadcast-transcription-translation-plan-20260920.md) | 广播功能的需求与实施方案（含产品规格、数据设计与验收矩阵） |
-| [docs/offline-accuracy-20260920.md](docs/offline-accuracy-20260920.md) | 默认离线实际 ASR 的设计、三段主机回放证据、指标口径与验收边界 |
-| [docs/verification.md](docs/verification.md) | 各平台实测结果、Python 基准环境搭建、脚本清单与推荐工作流 |
-| [docs/android-device.md](docs/android-device.md) | Android 真机联调、系统限制与替代手段、抓音质量校准 |
-| [docs/ios.md](docs/ios.md) | iOS 支持说明、首次编译踩坑清单与必需配置 |
+| [docs/architecture.md](docs/architecture.md) | 分层结构、数据流、依赖组装、数据模型与状态机 |
+| [docs/matching.md](docs/matching.md) | 匹配算法、阈值常量、指标口径、主机端到端证据与耗时 |
+| [docs/offline-accuracy.md](docs/offline-accuracy.md) | 三段内置语料的离线实际 ASR 验收（主机 / Android / iOS） |
+| [docs/device-verification.md](docs/device-verification.md) | **真机验收记录**（方法、命令、快照脚本与待补充的记录表） |
+| [docs/platform-android.md](docs/platform-android.md) | Android 构建安装、系统限制与替代手段、抓音质量校准 |
+| [docs/platform-ios.md](docs/platform-ios.md) | iOS 支持、必需配置、依赖共存与模拟器限制 |
+| [docs/legacy-demo.md](docs/legacy-demo.md) | 旧 Demo（实时跟读 / 语料校核 / 流式诊断）与流式链路经验 |
+| [docs/evidence/](docs/evidence/) | 机器可读验收证据（主机 / Android / iOS 指标与日志） |
 
 ## 许可与致谢
 
 - 本仓库代码：[MIT](LICENSE)；
-- 声学模型、词表与数据表来自 [yazinsai/tilawa](https://github.com/yazinsai/tilawa) v0.2.0
+- 声学模型、词表与旧库数据表来自 [yazinsai/tilawa](https://github.com/yazinsai/tilawa) v0.2.0
   （模型 CC-BY-4.0，基座 `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`），
   `tools/quran_offline/reference/*.ts` 为 Tilawa 的 MIT 参考实现，仅用于对照 Dart 侧语义；
-- 经文库 `quran.json` 随 Tilawa 分发，使用前请确认其许可与标注要求。
+- 全经原文快照来自 [Tanzil Project](https://tanzil.net/)（CC-BY 3.0，许可与上游 SHA-256
+  见 `assets/broadcast_quran/full/manifest.json` 与 `NOTICE.txt`）；
+- 章名元数据来自 [risan/quran-json](https://github.com/risan/quran-json)（CC BY-SA 4.0）；
+- 62 种语言人工译本来自 QuranEnc（经 [risan/quran-json](https://github.com/risan/quran-json) 分发），
+  每个语言文件与目录条目都带出版方、版本、来源与许可全文，
+  使用时必须遵守 QuranEnc 的署名与不得修改增删等义务，界面需展示署名。
