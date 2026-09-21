@@ -273,6 +273,33 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
   }
 
   Widget _buildMatchCard(UtteranceRecord? recent) {
+    // 识别中：匹配经文栏跟随草稿同步刷新为「候选」，不再等片段结束。
+    final preview = _session.isRunning ? _session.preview : null;
+    if (preview != null) {
+      final outcome = preview.outcome;
+      final matches = outcome.matches;
+      if (matches.isEmpty) {
+        return TextSectionCard(
+          title: '匹配经文',
+          subtitle: '识别中 · 候选 ${outcome.candidateRef ?? '无'}',
+          body: '',
+          rtl: true,
+          emptyHint: outcome.rejectionReason ?? '本片段暂未命中库内经文，继续诵读会实时更新。',
+          badge: '候选',
+        );
+      }
+      final whole = matches.every((match) => match.isWholeVerse);
+      return TextSectionCard(
+        title: '匹配经文',
+        subtitle: '识别中 · 候选 ${outcome.candidateRef} · '
+            '${whole ? '完整节' : '部分节'} · '
+            '覆盖 ${outcome.coverage?.toStringAsFixed(2) ?? '-'}',
+        body: <String>[for (final match in matches) match.canonicalTextSnapshot].join('\n\n'),
+        rtl: true,
+        badge: '候选 · 随识别更新',
+        footnote: '终稿确认（安静约 1.2 秒）后固定；预览口径与终稿可能略有差异。',
+      );
+    }
     if (recent == null) {
       return const TextSectionCard(
         title: '匹配经文',
@@ -313,6 +340,31 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
 
   Widget _buildTranslationCard(UtteranceRecord? recent) {
     final language = _session.targetLanguage;
+    // 识别中：译文栏跟随候选同步刷新（候选稳定后自动生成预览译文）。
+    final preview = _session.isRunning ? _session.preview : null;
+    if (preview != null) {
+      if (preview.translationText != null && preview.translationText!.isNotEmpty) {
+        return TextSectionCard(
+          title: '目标译文',
+          subtitle: preview.translationSource ?? language.label,
+          body: preview.translationText!,
+          badge: '预览',
+          badgeColor: Colors.orange.shade800,
+          footnote: '终稿确认后固定为正式译文并写入历史。',
+        );
+      }
+      return TextSectionCard(
+        title: '目标译文',
+        subtitle: preview.translationPending
+            ? '${language.label} · 正在生成预览译文'
+            : '${language.label} · 等待候选稳定',
+        body: '',
+        emptyHint: preview.translationPending
+            ? '首次翻译需要引擎冷启动，稍候…'
+            : '候选经文连续两次一致后自动生成预览译文；'
+                  '若长时间不出现，可能是缺少离线语言包（点上方「准备语言包」）。',
+      );
+    }
     if (recent == null) {
       return TextSectionCard(
         title: '目标译文',

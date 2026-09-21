@@ -24,6 +24,57 @@ import 'quran_match_service.dart';
 import 'translation_coordinator.dart';
 import 'utterance_segmenter.dart';
 
+/// 识别进行中的实时预览：转写草稿、候选经文与预览译文。
+///
+/// 三栏在片段进行中即同步刷新；预览匹配标注为「候选」，不落库、不产生历史记录，
+/// 终稿确认后由 [UtteranceRecord] 取代。
+class BroadcastPreview {
+  /// 构造预览。
+  ///
+  /// @param draftText 实际 ASR 草稿
+  /// @param outcome 候选匹配结果
+  /// @param translationText 预览译文（尚未生成时为 null）
+  /// @param translationSource 预览译文来源标签
+  /// @param translationPending 预览译文是否正在生成
+  const BroadcastPreview({
+    required this.draftText,
+    required this.outcome,
+    this.translationText,
+    this.translationSource,
+    this.translationPending = false,
+  });
+
+  /// 实际 ASR 草稿。
+  final String draftText;
+
+  /// 候选匹配结果。
+  final BroadcastMatchOutcome outcome;
+
+  /// 预览译文。
+  final String? translationText;
+
+  /// 预览译文来源标签。
+  final String? translationSource;
+
+  /// 预览译文是否正在生成。
+  final bool translationPending;
+
+  /// 复制并更新预览。
+  BroadcastPreview copyWith({
+    String? draftText,
+    BroadcastMatchOutcome? outcome,
+    String? translationText,
+    String? translationSource,
+    bool? translationPending,
+  }) => BroadcastPreview(
+    draftText: draftText ?? this.draftText,
+    outcome: outcome ?? this.outcome,
+    translationText: translationText ?? this.translationText,
+    translationSource: translationSource ?? this.translationSource,
+    translationPending: translationPending ?? this.translationPending,
+  );
+}
+
 /// 会话状态。
 enum BroadcastSessionStatus {
   /// 空闲，可开始。
@@ -98,6 +149,19 @@ class BroadcastSessionController extends ChangeNotifier {
   int _recordCount = 0;
   final List<UtteranceRecord> _recent = <UtteranceRecord>[];
 
+  /// 识别进行中的三栏预览（匹配候选 + 预览译文），终稿确认后清空。
+  BroadcastPreview? _preview;
+  String? _lastPreviewRef;
+  int _previewStableCount = 0;
+  bool _previewTranslating = false;
+  final Map<String, String> _previewTranslationMemo = <String, String>{};
+
+  /// 预览匹配用轻配置：topK 减半以控制预览开销；终稿仍用完整配置。
+  late final QuranMatchService _previewMatcher = QuranMatchService(
+    library: library,
+    config: const BroadcastMatchConfig(topK: 16),
+  );
+
   UtteranceSegmenter? _segmenter;
   StreamSubscription<Float32List>? _audioSubscription;
   final List<SpeechSegment> _finalQueue = <SpeechSegment>[];
@@ -116,6 +180,9 @@ class BroadcastSessionController extends ChangeNotifier {
 
   /// 当前片段草稿（实际 ASR 输出，未匹配、未翻译）。
   String get draftText => _draftText;
+
+  /// 识别进行中的三栏预览：转写草稿、候选经文与预览译文同步刷新。
+  BroadcastPreview? get preview => _preview;
 
   /// 状态提示（权限、超载、错误等）。
   String? get statusMessage => _statusMessage;
@@ -180,6 +247,7 @@ class BroadcastSessionController extends ChangeNotifier {
       _queueOverflowCount = 0;
       _draftText = '';
       _lastPreviewAt = 0;
+      _clearPreview();
       final stream = await audio.start();
       _status = BroadcastSessionStatus.running;
       _sessionSaved = 0;
@@ -241,6 +309,7 @@ class BroadcastSessionController extends ChangeNotifier {
         ? '本次有 $_queueOverflowCount 个片段因过载未处理，请降低输入频率'
         : null;
     _draftText = '';
+    _clearPreview();
     notifyListeners();
   }
 
@@ -356,6 +425,8 @@ class BroadcastSessionController extends ChangeNotifier {
     _recent.insert(0, record);
     if (_recent.length > 20) _recent.removeLast();
     _draftText = '';
+    // 终稿已确认：清空预览，三栏切换为已确认记录（新片段从空草稿开始）。
+    _clearPreview();
     watch.stop();
     debugPrint(
       '[Broadcast] 记录 #${record.displaySequence} 已保存'
@@ -373,7 +444,11 @@ class BroadcastSessionController extends ChangeNotifier {
     }
   }
 
-  /// 实时草稿：只在空闲且没有待处理终稿时执行，避免与终稿抢模型。
+  /// 实时预览：只在空闲且没有待处理终稿时执行，避免与终稿抢模型。
+  ///
+  /// 与只更新转写草稿不同，这里同时对同一份声学证据跑一次候选匹配，
+  /// 让「转写 / 匹配经文 / 译文」三栏在片段进行中就同步刷新；
+  /// 预览匹配标注为候选，不落库、不产生历史记录。
   Future<void> _maybePreview() async {
     final segmenter = _segmenter;
     if (segmenter == null || _busy || _finalQueue.isNotEmpty) return;
@@ -388,15 +463,101 @@ class BroadcastSessionController extends ChangeNotifier {
         segmenter.pendingSamples,
         offsetSample: segmenter.totalSamples - segmenter.pendingSamples.length,
       );
-      if (fragment.words.isNotEmpty && _status == BroadcastSessionStatus.running) {
-        _draftText = fragment.text;
-        notifyListeners();
-      }
+      if (fragment.words.isEmpty || _status != BroadcastSessionStatus.running) return;
+      final matchWatch = Stopwatch()..start();
+      final outcome = _previewMatcher.match(fragment);
+      matchWatch.stop();
+      _draftText = fragment.text;
+      _preview = BroadcastPreview(draftText: fragment.text, outcome: outcome);
+      debugPrint(
+        '[Broadcast] 预览 ${segmenter.pendingSeconds.toStringAsFixed(1)}s：'
+        '${outcome.status.name} 候选=${outcome.candidateRef ?? '-'} '
+        '覆盖=${outcome.coverage?.toStringAsFixed(2) ?? '-'} '
+        '置信=${outcome.confidence?.toStringAsFixed(2) ?? '-'} '
+        '匹配 ${matchWatch.elapsedMilliseconds}ms'
+        '${outcome.rejectionReason == null ? '' : ' 原因=${outcome.rejectionReason}'}',
+      );
+      _trackPreviewStability(outcome);
+      notifyListeners();
     } catch (_) {
       // 预览失败不影响终稿链路。
     } finally {
       _busy = false;
     }
+  }
+
+  /// 候选经连续两次相同即触发一次预览翻译（与终稿共用缓存，不重复调引擎）。
+  void _trackPreviewStability(BroadcastMatchOutcome outcome) {
+    final ref = outcome.candidateRef;
+    if (ref == null) {
+      _lastPreviewRef = null;
+      _previewStableCount = 0;
+      return;
+    }
+    if (ref != _lastPreviewRef) {
+      _lastPreviewRef = ref;
+      _previewStableCount = 1;
+      return;
+    }
+    _previewStableCount++;
+    if (_previewStableCount == 2) unawaited(_translatePreview(outcome));
+  }
+
+  /// 预览译文：命中内存或数据库缓存时零成本返回；未命中调一次引擎并写入缓存，
+  /// 片段结束后的正式翻译通常直接命中，不会重复调用。
+  Future<void> _translatePreview(BroadcastMatchOutcome outcome) async {
+    if (_previewTranslating || _status != BroadcastSessionStatus.running) return;
+    final language = _targetLanguage;
+    final matched = outcome.matches.isNotEmpty;
+    final memoKey = '${language.code}:${matched ? outcome.matches.map((match) => match.ref).join(',') : outcome.asrText}';
+    if (memoKey.length > 1 && !memoKey.endsWith(':')) {
+      final memo = _previewTranslationMemo[memoKey];
+      if (memo != null) {
+        _preview = _preview?.copyWith(
+          translationText: memo,
+          translationSource: _previewSourceLabel(matched, language),
+          translationPending: false,
+        );
+        notifyListeners();
+        return;
+      }
+    }
+    _previewTranslating = true;
+    _preview = _preview?.copyWith(translationText: null, translationSource: null, translationPending: true);
+    notifyListeners();
+    try {
+      final text = await translations.translatePreview(
+        matches: outcome.matches,
+        asrText: outcome.asrText,
+        language: language,
+      );
+      // 候选已切换：丢弃过期译文，等下一轮稳定再取（通常已入缓存）。
+      if (_preview == null || _preview!.outcome.candidateRef != outcome.candidateRef) return;
+      if (text != null && text.trim().isNotEmpty) {
+        _previewTranslationMemo[memoKey] = text;
+        _preview = _preview!.copyWith(
+          translationText: text,
+          translationSource: _previewSourceLabel(matched, language),
+          translationPending: false,
+        );
+        debugPrint('[Broadcast] 预览译文：${text.length > 40 ? '${text.substring(0, 40)}…' : text}');
+      } else {
+        _preview = _preview!.copyWith(translationPending: false);
+      }
+      notifyListeners();
+    } finally {
+      _previewTranslating = false;
+    }
+  }
+
+  static String _previewSourceLabel(bool matched, TargetLanguage language) =>
+      '${language.label} · ${matched ? '机器翻译·标准原文' : '机器翻译·识别转写'}（预览）';
+
+  /// 终稿确认或会话结束后清空预览（三栏切换为已确认记录）。
+  void _clearPreview() {
+    _preview = null;
+    _lastPreviewRef = null;
+    _previewStableCount = 0;
   }
 
   Future<void> _runTranslations() async {
@@ -414,6 +575,7 @@ class BroadcastSessionController extends ChangeNotifier {
     _segmenter?.reset();
     _finalQueue.clear();
     _draftText = '';
+    _clearPreview();
     notifyListeners();
   }
 

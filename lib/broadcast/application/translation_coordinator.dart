@@ -127,20 +127,40 @@ class TranslationCoordinator {
   /// @param record 记录
   /// @param language 目标语言
   /// @return 输入与来源
-  Future<TranslationInput> resolveInput(UtteranceRecord record, TargetLanguage language) async {
-    final asrText = record.rawAsrText.trim();
-    if (record.matches.isEmpty || !record.matchStatus.isMatched) {
+  Future<TranslationInput> resolveInput(UtteranceRecord record, TargetLanguage language) =>
+      resolveInputFor(
+        matches: record.matches,
+        asrText: record.rawAsrText,
+        language: language,
+        matched: record.matchStatus.isMatched,
+      );
+
+  /// 与 [resolveInput] 同一套来源规则，但允许没有持久记录的调用方（实时预览）使用。
+  ///
+  /// @param matches 匹配范围（可为空）
+  /// @param asrText 实际转写
+  /// @param language 目标语言
+  /// @param matched 是否处于已匹配状态
+  /// @return 输入与来源
+  Future<TranslationInput> resolveInputFor({
+    required List<MatchedVerse> matches,
+    required String asrText,
+    required TargetLanguage language,
+    required bool matched,
+  }) async {
+    final text = asrText.trim();
+    if (matches.isEmpty || !matched) {
       // 未匹配：翻译实际 ASR 转写，原文与匹配指标留空。
       return TranslationInput(
         kind: TranslationInputKind.asr,
         sourceKind: TranslationSourceKind.machineAsr,
-        text: asrText,
+        text: text,
         inputScope: 'asr',
       );
     }
 
     // 已匹配：优先查授权校订译本（整节粒度）。
-    final ordered = <MatchedVerse>[...record.matches]..sort((a, b) => a.ordinal.compareTo(b.ordinal));
+    final ordered = <MatchedVerse>[...matches]..sort((a, b) => a.ordinal.compareTo(b.ordinal));
     if (ordered.every((match) => match.isWholeVerse)) {
       final curated = await _lookupCurated(ordered, language);
       if (curated != null) {
@@ -168,6 +188,67 @@ class TranslationCoordinator {
       text: _canonicalText(ordered),
       inputScope: hasPartial ? 'confirmedRange' : 'fullVerses',
     );
+  }
+
+  /// 预览翻译：与终稿共用同一套来源规则、缓存键与缓存表。
+  ///
+  /// 识别进行中即可调用：缓存命中时直接返回（零成本），未命中时调用一次引擎并把
+  /// 结果写入缓存 —— 因此片段结束后的正式翻译通常直接命中，不会重复调用引擎。
+  /// 预览结果**不**写任何记录行，落库仍只发生在终稿。
+  ///
+  /// @param matches 当前候选匹配范围（可为空）
+  /// @param asrText 实际转写
+  /// @param language 目标语言
+  /// @return 译文；缺语言包或引擎失败时返回 null
+  Future<String?> translatePreview({
+    required List<MatchedVerse> matches,
+    required String asrText,
+    required TargetLanguage language,
+  }) async {
+    final input = await resolveInputFor(
+      matches: matches,
+      asrText: asrText,
+      language: language,
+      matched: matches.isNotEmpty,
+    );
+    if (input.text.trim().isEmpty) return null;
+    if (input.sourceKind == TranslationSourceKind.curatedEdition) return input.text;
+    final provider = engine.engineId;
+    final cacheKey = cacheKeyFor(
+      input,
+      language,
+      provider: provider,
+      engineId: engine.engineId,
+      generation: engine.generation,
+    );
+    final cached = await records.readCache(cacheKey);
+    if (cached != null) return cached;
+    try {
+      final result = await engine.translate(
+        TranslationRequest(
+          recordId: 'preview',
+          revision: 0,
+          inputText: input.text,
+          inputKind: input.kind,
+          sourceHash: 'preview',
+          targetLanguage: language,
+        ),
+      );
+      await records.writeCache(
+        cacheKey,
+        result.text,
+        provider: provider,
+        sourceKind: input.sourceKind,
+        engineId: result.engineId,
+      );
+      return result.text;
+    } on TranslationException catch (error) {
+      debugPrint('[Broadcast] 预览翻译不可用：${error.code.wireName} — ${error.message}');
+      return null;
+    } catch (error) {
+      debugPrint('[Broadcast] 预览翻译失败：$error');
+      return null;
+    }
   }
 
   /// 计算缓存键。

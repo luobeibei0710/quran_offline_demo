@@ -216,6 +216,42 @@ void main() {
   });
 
   group('断句与落库', () {
+    test('识别中三栏预览同步：候选经文与预览译文在片段进行中出现，终稿后清空', () async {
+      final controller = buildController();
+      await controller.start();
+      // 3 秒连续语音（无停顿、不触发终稿）→ 满足预览条件（≥2s）。
+      audio.controller.add(_speech(3));
+      await settle();
+      await settle();
+
+      var preview = controller.preview;
+      expect(preview, isNotNull, reason: '识别中应有三栏预览，而不是只有转写草稿');
+      expect(preview!.draftText, isNotEmpty);
+      expect(preview.outcome.matches, isNotEmpty, reason: '匹配经文栏应与草稿同步显示候选');
+      expect(preview.outcome.matches.single.ref, '112:1');
+      expect(await records.count(), 0, reason: '预览候选不得落库');
+
+      // 再喂 2.5 秒：满足预览间隔（2s），候选连续第二次相同 → 生成预览译文。
+      audio.controller.add(_speech(2.5));
+      await settle();
+      await settle();
+      preview = controller.preview;
+      expect(preview, isNotNull);
+      expect(preview!.translationText, '译文', reason: '候选稳定后应出现预览译文');
+      expect(preview.translationSource, contains('预览'));
+
+      // 静音 1.5 秒触发终稿：预览清空，三栏切换为已确认记录。
+      audio.controller.add(_silence(1.5));
+      await settle();
+      await settle();
+      expect(controller.preview, isNull, reason: '终稿确认后应清空预览');
+      final record = (await records.page()).single;
+      expect(record.matches.single.ref, '112:1');
+      expect(record.translationFor(TargetLanguage.simplifiedChinese)?.text, '译文');
+      await controller.stop();
+      controller.dispose();
+    });
+
     test('自然停顿产生一条记录，三类文本各自快照', () async {
       final controller = buildController();
       await controller.start();
