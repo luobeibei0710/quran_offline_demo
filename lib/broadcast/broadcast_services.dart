@@ -20,6 +20,7 @@ import 'application/translation_coordinator.dart';
 import 'data/app_database.dart';
 import 'data/broadcast_corpus.dart';
 import 'data/record_repository.dart';
+import 'data/translation_catalog.dart';
 import 'domain/utterance_record.dart';
 import 'translation/mlkit_translation_engine.dart';
 import 'translation/verse_translation_repository.dart';
@@ -34,6 +35,7 @@ class BroadcastServices {
     required this.transcriber,
     required this.matcher,
     required this.engine,
+    required this.translationCatalog,
     required this.editions,
     required this.translations,
     required this.session,
@@ -66,7 +68,10 @@ class BroadcastServices {
   /// 机器翻译引擎。
   final MlKitTranslationEngine engine;
 
-  /// 校订译本仓储（当前为无译本实现）。
+  /// 译本目录（62 种语言，含许可与署名信息）。
+  final BroadcastTranslationCatalog translationCatalog;
+
+  /// 校订译本仓储（按语言查表，命中即返回权威人工译本）。
   final VerseTranslationRepository editions;
 
   /// 翻译协调器。
@@ -108,7 +113,9 @@ class BroadcastServices {
     );
     final matcher = QuranMatchService(library: library);
     final translationEngine = engine ?? MlKitTranslationEngine();
-    const editions = NoCuratedEditionRepository();
+    // 译本目录：注册可选语言（62 种）并提供权威译本查表。
+    final translationCatalog = await BroadcastTranslationCatalog.load();
+    final editions = JsonVerseTranslationRepository(catalog: translationCatalog);
     final translations = TranslationCoordinator(
       engine: translationEngine,
       records: records,
@@ -118,7 +125,7 @@ class BroadcastServices {
 
     final savedLanguage = await database.readSetting(languageSettingKey);
     final targetLanguage =
-        TargetLanguage.tryParse(savedLanguage) ?? TargetLanguage.simplifiedChinese;
+        TargetLanguage.tryParse(savedLanguage) ?? TargetLanguage.chinese;
 
     final session = BroadcastSessionController(
       transcriber: transcriber,
@@ -138,6 +145,7 @@ class BroadcastServices {
       transcriber: transcriber,
       matcher: matcher,
       engine: translationEngine,
+      translationCatalog: translationCatalog,
       editions: editions,
       translations: translations,
       session: session,
@@ -150,7 +158,7 @@ class BroadcastServices {
   ///
   /// @param language 目标语言
   Future<void> persistTargetLanguage(TargetLanguage language) =>
-      database.writeSetting(languageSettingKey, language.code);
+      database.writeSetting(languageSettingKey, language.id);
 
   /// 释放资源。
   Future<void> dispose() async {

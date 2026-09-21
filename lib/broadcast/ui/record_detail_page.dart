@@ -135,11 +135,11 @@ class _RecordDetailPageState extends State<RecordDetailPage> {
             icon: const Icon(Icons.translate),
             onSelected: (language) => unawaited(_addLanguage(language)),
             itemBuilder: (context) => <PopupMenuEntry<TargetLanguage>>[
-              for (final language in TargetLanguage.values)
+              for (final language in TargetLanguage.all)
                 PopupMenuItem<TargetLanguage>(
                   value: language,
                   enabled: record.translationFor(language) == null,
-                  child: Text('追加 ${language.label}'),
+                  child: Text('追加 ${language.displayName}'),
                 ),
             ],
           ),
@@ -181,7 +181,7 @@ class _RecordDetailPageState extends State<RecordDetailPage> {
           ),
           const SizedBox(height: 2),
           Text(
-            '源语言 $broadcastSourceLanguage → 目标语言 ${record.targetLanguage.label} · '
+            '源语言 $broadcastSourceLanguage → 目标语言 ${record.targetLanguage.displayName} · '
             '修订 ${record.revision} · 语料 ${widget.services.library.manifest.corpusId}',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
           ),
@@ -217,7 +217,7 @@ class _RecordDetailPageState extends State<RecordDetailPage> {
     if (translation == null) {
       return TextSectionCard(
         title: '目标译文',
-        subtitle: '${record.targetLanguage.label} · 待生成',
+        subtitle: '${record.targetLanguage.displayName} · 待生成',
         body: '',
         emptyHint: '该语言版本尚未生成，可通过右上角菜单追加。',
         onRetry: _busy ? null : () => unawaited(_retry(record.targetLanguage)),
@@ -225,7 +225,7 @@ class _RecordDetailPageState extends State<RecordDetailPage> {
     }
     return TextSectionCard(
       title: '目标译文',
-      subtitle: '${record.targetLanguage.label} · ${translation.status.label}'
+      subtitle: '${record.targetLanguage.displayName} · ${translation.status.label}'
           '${translation.inputScope == 'confirmedRange' ? ' · 仅已确认范围' : ''}'
           '${translation.inputScope == 'asr' ? ' · 输入为识别转写' : ''}',
       body: translation.status == TranslationStatus.done ? translation.text : '',

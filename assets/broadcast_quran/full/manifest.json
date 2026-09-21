@@ -1,0 +1,24 @@
+{
+ "corpusId": "tanzil-1.1-uthmani-full",
+ "corpusVersion": "1.1",
+ "provider": "Tanzil Project",
+ "licenseUrl": "https://tanzil.net/docs/Text_License",
+ "sourceFile": "resources/broadcast_quran/tanzil_1_1/quran-uthmani.txt",
+ "sourceSha256": "bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8",
+ "sourceVerseCount": 6236,
+ "surahCount": 114,
+ "verseCount": 6236,
+ "chapterOpeningPrefixCount": 112,
+ "versesFile": "quran.json",
+ "noticeFile": "NOTICE.txt",
+ "normalizationVersion": "quran-text-normalize-1",
+ "tokenTableFile": "verse_ctc_tokens.json",
+ "tokenTableNote": "由 tools/broadcast_quran/generate_verse_tokens.py 从 assets/quran_offline/vocab.json 与全经语料独立生成，不含旧经文库的任何文本或索引。上游 unigram 分词分数未公开，本表用确定性最少 token 数分词，因此排序分数的绝对值口径与旧库不同；跨度惩罚与跨度上限的标定见 docs/broadcast-implementation-20260921.md。",
+ "chapterMetadata": {
+  "source": "https://quran-json.risanb.com/chapters.json",
+  "license": "CC BY-SA 4.0（risan/quran-json 元数据）",
+  "note": "章名与章号是事实性元数据；阿拉伯原文与前缀标记来自 Tanzil 快照。"
+ },
+ "tokenTableSha256": "15f57560ce3f620fc7713cd783b25b9bd5d7b72b446098bc2d4553222c670080",
+ "tokenTableBytes": 13235321
+}

@@ -9,6 +9,8 @@
 /// 打分与跨度惩罚的标定数据见 `tools/quran_offline/tune_span_penalty.py`。
 library;
 
+import 'dart:math' as math;
+
 import 'ctc_scorer.dart';
 import 'quran_assets.dart';
 import 'quran_text.dart';
@@ -115,7 +117,8 @@ class QuranMatcher {
   /// 构造匹配器并建立倒排索引。
   ///
   /// @param verseIndex 经文索引（旧库或广播新库），只使用其经文与 token 数据
-  QuranMatcher(this.verseIndex) {
+  /// @param lengthFitWeight 召回打分中「长度匹配度」的权重，默认 0（保持旧库语义）
+  QuranMatcher(this.verseIndex, {this.lengthFitWeight = 0}) {
     for (var i = 0; i < verseIndex.verses.length; i++) {
       final words = verseIndex.verses[i].words;
       if (words.isEmpty) continue;
@@ -129,6 +132,17 @@ class QuranMatcher {
 
   /// 经文索引（决定在哪个语料库内检索）。
   final VerseIndex verseIndex;
+
+  /// 召回打分中「长度匹配度」的权重。
+  ///
+  /// 默认 0 表示完全沿用旧库语义（只看覆盖率与编辑相似度）。全经 6236 节下必须
+  /// 打开它：按覆盖率召回时，极短节会系统性占满候选池 —— 实测全经有 553 个
+  /// ≤3 词的节，长转写里命中一两个常见词就能让它们覆盖率接近 1.0，而长节因为
+  /// 词多、覆盖率天然偏低，于是正确候选根本进不了 topK。
+  ///
+  /// 打开后打分变为 `覆盖率×(0.85−w) + 编辑相似度×0.15 + 长度匹配度×w`，
+  /// 其中长度匹配度 = min(转写词数, 候选词数) / max(两者)。
+  final double lengthFitWeight;
 
   /// 词 -> 经文下标倒排索引（**全文**分词，不只用首词）。
   ///
@@ -145,6 +159,12 @@ class QuranMatcher {
 
   /// 默认最大连读跨度（节）。
   static const int defaultMaxSpan = 4;
+
+  /// 长度匹配度低于该值才视为「明显过短」并降权。
+  ///
+  /// 取 0.35：转写 60 词时，15 词的正常节（比值 0.25）会被轻微降权，
+  /// 而 2-3 词的极短节（比值 0.03-0.05）会被显著降权 —— 后者才是要治理的对象。
+  static const double lengthFitFloor = 0.35;
 
   /// 默认返回的次优候选数量上限。
   ///
@@ -193,7 +213,8 @@ class QuranMatcher {
   /// @return 按文本得分降序的 (经文下标, 文本得分) 列表
   List<MapEntry<int, double>> recall(String decoded, {int limit = 200}) {
     if (decoded.trim().isEmpty) return const [];
-    final words = decoded.split(' ').where((w) => w.isNotEmpty).toSet();
+    final wordList = decoded.split(' ').where((w) => w.isNotEmpty).toList(growable: false);
+    final words = wordList.toSet();
     if (words.isEmpty) return const [];
 
     // 全文倒排：统计每个经节命中了识别文本里的几个词
@@ -210,11 +231,11 @@ class QuranMatcher {
     if (hitCount.length < 8) {
       // 命中过少（识别文本生僻或含噪声）→ 全量覆盖率扫描
       for (var i = 0; i < verseIndex.verses.length; i++) {
-        candidates.add(MapEntry(i, _textScoreOf(i, words, decoded)));
+        candidates.add(MapEntry(i, _textScoreOf(i, words, decoded, wordList.length)));
       }
     } else {
       for (final index in hitCount.keys) {
-        candidates.add(MapEntry(index, _textScoreOf(index, words, decoded)));
+        candidates.add(MapEntry(index, _textScoreOf(index, words, decoded, wordList.length)));
       }
     }
 
@@ -249,11 +270,15 @@ class QuranMatcher {
 
   /// 计算某经节对识别文本的召回得分（覆盖率为主、编辑相似度为辅）。
   ///
+  /// [lengthFitWeight] 为 0 时与旧库语义逐位一致；大于 0 时额外计入长度匹配度，
+  /// 用于在全经规模下抑制极短节对候选池的垄断。
+  ///
   /// @param verseIndex 经节下标
   /// @param words 识别文本的词集合
   /// @param decoded 识别文本
+  /// @param decodedWordCount 识别文本的词数（调用方预算，避免重复分词）
   /// @return 0..1 的召回得分；完全无词命中时为 0
-  double _textScoreOf(int verseIndex, Set<String> words, String decoded) {
+  double _textScoreOf(int verseIndex, Set<String> words, String decoded, int decodedWordCount) {
     final verseWords = _verseWordSets[verseIndex];
     if (verseWords == null || verseWords.isEmpty) return 0.0;
     var matched = 0;
@@ -263,7 +288,14 @@ class QuranMatcher {
     final coverage = matched / words.length;
     if (coverage == 0.0) return 0.0;
     final edit = QuranText.textScore(decoded, this.verseIndex.verses[verseIndex].normalizedText);
-    return coverage * 0.85 + edit * 0.15;
+    if (lengthFitWeight <= 0) return coverage * 0.85 + edit * 0.15;
+    final verseWordCount = verseWords.length;
+    final longer = math.max(decodedWordCount, verseWordCount);
+    final lengthFit = longer == 0 ? 0.0 : math.min(decodedWordCount, verseWordCount) / longer;
+    // 只惩罚「明显过短」的候选。若按 lengthFit 全额加权，正确的中等长度节也会因
+    // 「长转写 vs 中节」被一起挤出召回池（实测会让 67:14 输给 67:15）。
+    final shortfall = math.max(0.0, lengthFitFloor - lengthFit);
+    return coverage * 0.85 + edit * 0.15 - shortfall * lengthFitWeight;
   }
 
   /// 执行「召回 + CTC 精排」，返回匹配结果。

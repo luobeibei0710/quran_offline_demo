@@ -142,7 +142,7 @@ class RecordRepository {
         'boundary_reason': draft.boundaryReason.wireName,
         'raw_asr_text': draft.rawAsrText,
         'source_language': broadcastSourceLanguage,
-        'target_language': draft.targetLanguage.code,
+        'target_language': draft.targetLanguage.id,
         'match_status': draft.matchStatus.name,
         'scope': draft.scope.wireName,
         'processing_ms': draft.processingMs,
@@ -225,7 +225,7 @@ class RecordRepository {
           'id': job.id,
           'record_id': recordId,
           'revision': job.revision,
-          'target_language': job.targetLanguage.code,
+          'target_language': job.targetLanguage.id,
           'provider': job.provider,
           'source_hash': job.sourceHash,
           'state': job.state.wireName,
@@ -331,14 +331,14 @@ class RecordRepository {
     if (rows.isEmpty) return false;
     final revision = rows.first['revision'] as int?;
     final language = rows.first['target_language'] as String?;
-    if (revision != translation.revision || language != translation.targetLanguage.code) {
+    if (revision != translation.revision || language != translation.targetLanguage.id) {
       return false;
     }
     await db.insert('record_translations', <String, Object?>{
       'id': translation.id,
       'record_id': translation.recordId,
       'revision': translation.revision,
-      'target_language': translation.targetLanguage.code,
+      'target_language': translation.targetLanguage.id,
       'provider': translation.provider,
       'source_kind': translation.sourceKind.wireName,
       'edition_id': translation.editionId,
@@ -419,7 +419,7 @@ class RecordRepository {
       'translation_jobs',
       <String, Object?>{'state': TranslationJobState.pending.wireName, 'last_error': null},
       where: 'record_id = ? AND target_language = ?',
-      whereArgs: <Object?>[recordId, language.code],
+      whereArgs: <Object?>[recordId, language.id],
     );
   }
 
@@ -531,7 +531,7 @@ class RecordRepository {
           boundaryReason: _boundaryReason(row['boundary_reason'] as String?),
           rawAsrText: '${row['raw_asr_text']}',
           targetLanguage:
-              TargetLanguage.tryParse(row['target_language'] as String?) ?? TargetLanguage.simplifiedChinese,
+              TargetLanguage.tryParse(row['target_language'] as String?) ?? TargetLanguage.chinese,
           matchStatus: _matchStatus(row['match_status'] as String?),
           scope: _scope(row['scope'] as String?),
           createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int, isUtc: true),
@@ -570,7 +570,7 @@ class RecordRepository {
     recordId: '${row['record_id']}',
     revision: row['revision']! as int,
     targetLanguage:
-        TargetLanguage.tryParse(row['target_language'] as String?) ?? TargetLanguage.simplifiedChinese,
+        TargetLanguage.tryParse(row['target_language'] as String?) ?? TargetLanguage.chinese,
     provider: '${row['provider']}',
     sourceKind: _sourceKind(row['source_kind'] as String?),
     sourceHash: '${row['source_hash']}',
@@ -589,7 +589,7 @@ class RecordRepository {
     recordId: '${row['record_id']}',
     revision: row['revision']! as int,
     targetLanguage:
-        TargetLanguage.tryParse(row['target_language'] as String?) ?? TargetLanguage.simplifiedChinese,
+        TargetLanguage.tryParse(row['target_language'] as String?) ?? TargetLanguage.chinese,
     provider: '${row['provider']}',
     sourceHash: '${row['source_hash']}',
     state: _jobState(row['state'] as String?),

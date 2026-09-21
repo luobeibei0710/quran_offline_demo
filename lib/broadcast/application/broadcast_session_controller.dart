@@ -110,7 +110,7 @@ class BroadcastSessionController extends ChangeNotifier {
     required this.translations,
     required this.audio,
     required this.library,
-    TargetLanguage targetLanguage = TargetLanguage.simplifiedChinese,
+    TargetLanguage targetLanguage = TargetLanguage.chinese,
     this.segmenterConfig = const UtteranceSegmenterConfig(),
     this.previewIntervalSeconds = 1,
   }) : _targetLanguage = targetLanguage;
@@ -250,7 +250,7 @@ class BroadcastSessionController extends ChangeNotifier {
       _status = BroadcastSessionStatus.running;
       _sessionSaved = 0;
       debugPrint(
-        '[Broadcast] 开始识别：目标语言 ${_targetLanguage.code}，'
+        '[Broadcast] 开始识别：目标语言 ${_targetLanguage.id}，'
         '断句 静音≥${segmenterConfig.silenceSeconds}s / 最短 ${segmenterConfig.minSpeechSeconds}s / '
         '最长 ${segmenterConfig.maxSeconds}s',
       );
@@ -533,7 +533,7 @@ class BroadcastSessionController extends ChangeNotifier {
     if (_previewTranslating || _status != BroadcastSessionStatus.running) return;
     final language = _targetLanguage;
     final matched = outcome.matches.isNotEmpty;
-    final memoKey = '${language.code}:${matched ? outcome.matches.map((match) => match.ref).join(',') : outcome.asrText}';
+    final memoKey = '${language.id}:${matched ? outcome.matches.map((match) => match.ref).join(',') : outcome.asrText}';
     if (memoKey.length > 1 && !memoKey.endsWith(':')) {
       final memo = _previewTranslationMemo[memoKey];
       if (memo != null) {
@@ -575,7 +575,7 @@ class BroadcastSessionController extends ChangeNotifier {
   }
 
   static String _previewSourceLabel(bool matched, TargetLanguage language) =>
-      '${language.label} · ${matched ? '机器翻译·标准原文' : '机器翻译·识别转写'}（预览）';
+      '${language.displayName} · ${matched ? '机器翻译·标准原文' : '机器翻译·识别转写'}（预览）';
 
   /// 终稿确认或会话结束后清空预览（三栏切换为已确认记录）。
   void _clearPreview() {

@@ -12,33 +12,99 @@ library;
 
 import 'dart:math' as math;
 
-/// 目标语言（应用内部口径）。
-enum TargetLanguage {
-  /// 简体中文。
-  simplifiedChinese('zh-Hans', '简体中文'),
+/// 目标语言。
+///
+/// **不是编译期枚举**：可选语言由译本目录（62 种语言，来自
+/// `assets/broadcast_quran/full/translations/index.json`）决定，目录加载时通过
+/// [register] 注册；数据库只保存 [id]，读取时用注册表还原展示名。
+///
+/// 这样做的原因是译本数量随数据源增长，写死枚举会让每加一种语言都要改代码。
+class TargetLanguage {
+  /// 构造语言。
+  ///
+  /// @param id 稳定标识（与译本目录一致，如 `chinese`）
+  /// @param displayName 界面展示名（如 `简体中文`）
+  /// @param isRightToLeft 该语言是否从右到左书写
+  const TargetLanguage({
+    required this.id,
+    required this.displayName,
+    this.isRightToLeft = false,
+  });
 
-  /// 英语。
-  english('en', 'English');
+  /// 简体中文（默认语言，始终可用）。
+  static const TargetLanguage chinese = TargetLanguage(id: 'chinese', displayName: '简体中文');
 
-  const TargetLanguage(this.code, this.label);
+  /// 英语（内置兜底，保证目录缺失时界面仍有可用语言）。
+  static const TargetLanguage english = TargetLanguage(id: 'english', displayName: 'English');
 
-  /// 应用内语言标签。
-  final String code;
+  /// 稳定标识。
+  final String id;
 
   /// 界面展示名。
-  final String label;
+  final String displayName;
 
-  /// 从应用内标签解析。
+  /// 是否从右到左书写。
+  final bool isRightToLeft;
+
+  /// 早期两语言版本落库的标识到当前标识的映射。
+  static const Map<String, String> legacyIds = <String, String>{
+    'zh-Hans': 'chinese',
+    'en': 'english',
+  };
+
+  static final Map<String, TargetLanguage> _registry = <String, TargetLanguage>{
+    chinese.id: chinese,
+    english.id: english,
+  };
+
+  /// 注册目录中的语言（目录加载完成后调用；重复注册覆盖）。
   ///
-  /// @param code 语言标签
-  /// @return 目标语言；无法识别时返回 null
-  static TargetLanguage? tryParse(String? code) {
-    if (code == null) return null;
-    for (final value in TargetLanguage.values) {
-      if (value.code == code) return value;
+  /// @param languages 语言列表
+  static void register(Iterable<TargetLanguage> languages) {
+    for (final language in languages) {
+      _registry[language.id] = language;
     }
-    return null;
   }
+
+  /// 已注册的全部语言（中文与英语始终在前，便于界面默认选择）。
+  ///
+  /// @return 语言列表
+  static List<TargetLanguage> get all {
+    final others = _registry.values
+        .where((language) => language.id != chinese.id && language.id != english.id)
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    return <TargetLanguage>[chinese, english, ...others];
+  }
+
+  /// 按标识解析语言（兼容早期 `zh-Hans` / `en`）。
+  ///
+  /// @param value 语言标识
+  /// @return 语言；无法识别时返回 null
+  static TargetLanguage? tryParse(String? value) {
+    if (value == null) return null;
+    final normalized = legacyIds[value] ?? value;
+    final registered = _registry[normalized];
+    if (registered != null) return registered;
+    return TargetLanguage(id: normalized, displayName: normalized);
+  }
+
+  /// 仅用于测试：把注册表恢复为内置两语言。
+  static void resetRegistryForTest() {
+    _registry
+      ..clear()
+      ..[chinese.id] = chinese
+      ..[english.id] = english;
+  }
+
+  @override
+  bool operator ==(Object other) => other is TargetLanguage && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'TargetLanguage($id)';
 }
 
 /// 源语言固定为阿拉伯语。

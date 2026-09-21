@@ -199,7 +199,7 @@ void main() {
       final controller = buildController();
       expect(controller.updateTargetLanguage(TargetLanguage.english), isTrue);
       await controller.start();
-      expect(controller.updateTargetLanguage(TargetLanguage.simplifiedChinese), isFalse);
+      expect(controller.updateTargetLanguage(TargetLanguage.chinese), isFalse);
       await controller.stop();
       controller.dispose();
     });
@@ -265,7 +265,7 @@ void main() {
       expect(controller.preview, isNull, reason: '终稿确认后应清空预览');
       final record = (await records.page()).single;
       expect(record.matches.single.ref, '112:1');
-      expect(record.translationFor(TargetLanguage.simplifiedChinese)?.text, '译文');
+      expect(record.translationFor(TargetLanguage.chinese)?.text, '译文');
       await controller.stop();
       controller.dispose();
     });
@@ -286,8 +286,8 @@ void main() {
       expect(record.matches.single.ref, '112:1');
       expect(record.matches.single.canonicalTextSnapshot, isNotEmpty);
       expect(record.metrics?.f1, isNotNull);
-      expect(record.translationFor(TargetLanguage.simplifiedChinese)?.text, '译文');
-      expect(record.targetLanguage, TargetLanguage.simplifiedChinese);
+      expect(record.translationFor(TargetLanguage.chinese)?.text, '译文');
+      expect(record.targetLanguage, TargetLanguage.chinese);
       await controller.stop();
       controller.dispose();
     });
@@ -344,7 +344,7 @@ void main() {
       expect(record.matchStatus, MatchStatus.unmatched);
       expect(record.matches, isEmpty);
       expect(record.metrics!.f1, isNull);
-      expect(record.translationFor(TargetLanguage.simplifiedChinese), isNotNull,
+      expect(record.translationFor(TargetLanguage.chinese), isNotNull,
           reason: '未匹配也要给出真实机器翻译，并标明来自转写');
       await controller.stop();
       controller.dispose();

@@ -72,7 +72,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
   Future<void> _prepareLanguagePack() async {
     setState(() => _preparing = true);
     debugPrint(
-      '[Broadcast] 开始准备语言包：目标 ${_session.targetLanguage.code}'
+      '[Broadcast] 开始准备语言包：目标 ${_session.targetLanguage.id}'
       '（阿→中经英语中转，需阿拉伯语/英语/中文三份）',
     );
     try {
@@ -97,7 +97,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
 
   Future<void> _toggleLanguage(TargetLanguage language) async {
     if (_session.updateTargetLanguage(language)) {
-      debugPrint('[Broadcast] 目标语言切换为 ${language.code}（已持久化）');
+      debugPrint('[Broadcast] 目标语言切换为 ${language.id}（已持久化）');
       await widget.services.persistTargetLanguage(language);
       await _refreshEngineStatus();
       unawaited(widget.services.drainTranslations());
@@ -201,8 +201,8 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
                         if (value != null) unawaited(_toggleLanguage(value));
                       },
                 items: <DropdownMenuItem<TargetLanguage>>[
-                  for (final language in TargetLanguage.values)
-                    DropdownMenuItem<TargetLanguage>(value: language, child: Text(language.label)),
+                  for (final language in TargetLanguage.all)
+                    DropdownMenuItem<TargetLanguage>(value: language, child: Text(language.displayName)),
                 ],
               ),
               if (session.isRunning)
@@ -348,7 +348,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
         // 因此这里显示等待状态而不是翻译转写；终稿的未匹配记录仍会按需求翻译转写。
         return TextSectionCard(
           title: '目标译文',
-          subtitle: '${language.label} · 等待匹配经文',
+          subtitle: '${language.displayName} · 等待匹配经文',
           body: '',
           emptyHint: '预览译文跟随匹配经文：当前片段尚未命中库内三章'
               '（可能是章前求护词、解说词或其他章节），命中后自动翻译对应标准原文。',
@@ -357,7 +357,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
       if (preview.translationText != null && preview.translationText!.isNotEmpty) {
         return TextSectionCard(
           title: '目标译文',
-          subtitle: preview.translationSource ?? language.label,
+          subtitle: preview.translationSource ?? language.displayName,
           body: preview.translationText!,
           badge: '预览',
           badgeColor: Colors.orange.shade800,
@@ -367,8 +367,8 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
       return TextSectionCard(
         title: '目标译文',
         subtitle: preview.translationPending
-            ? '${language.label} · 正在生成预览译文'
-            : '${language.label} · 等待候选稳定',
+            ? '${language.displayName} · 正在生成预览译文'
+            : '${language.displayName} · 等待候选稳定',
         body: '',
         emptyHint: preview.translationPending
             ? '首次翻译需要引擎冷启动，稍候…'
@@ -379,7 +379,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     if (recent == null) {
       return TextSectionCard(
         title: '目标译文',
-        subtitle: '${language.label} · 尚无记录',
+        subtitle: '${language.displayName} · 尚无记录',
         body: '',
         emptyHint: '识别并确认一句后，这里显示译文及其来源（校订译本或机器翻译）。',
       );
@@ -388,7 +388,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     if (translation == null) {
       return TextSectionCard(
         title: '目标译文',
-        subtitle: '${language.label} · 等待翻译',
+        subtitle: '${language.displayName} · 等待翻译',
         body: '',
         emptyHint: '译文任务已入队，完成后会自动更新；失败可在同一记录重试。',
         onRetry: () => unawaited(_retry(recent, language)),
@@ -396,7 +396,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     }
     return TextSectionCard(
       title: '目标译文',
-      subtitle: '${language.label} · ${translation.status.label}'
+      subtitle: '${language.displayName} · ${translation.status.label}'
           '${translation.inputScope == 'confirmedRange' ? ' · 仅已确认范围' : ''}',
       body: translation.status == TranslationStatus.done ? translation.text : '',
       badge: translation.sourceKind.label,

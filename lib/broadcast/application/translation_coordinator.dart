@@ -269,7 +269,7 @@ class TranslationCoordinator {
     _stableHash(input.text),
     library.manifest.corpusId,
     library.manifest.corpusVersion,
-    language.code,
+    language.id,
     provider,
     engineId ?? 'unknown',
     'gen$generation',
@@ -294,7 +294,7 @@ class TranslationCoordinator {
     final input = await resolveInput(record, language);
     final sourceHash = _stableHash(input.text);
     debugPrint(
-      '[Broadcast] 翻译任务：记录 #${record.displaySequence} 语言=${language.label} '
+      '[Broadcast] 翻译任务：记录 #${record.displaySequence} 语言=${language.displayName} '
       '来源=${input.sourceKind.wireName} 范围=${input.inputScope} '
       '输入 ${input.text.length} 字符',
     );
@@ -475,24 +475,27 @@ class TranslationCoordinator {
   }
 
   Future<VerseTranslation?> _lookupCurated(List<MatchedVerse> matches, TargetLanguage language) async {
-    if (editions.editionId == null) return null;
+    final editionId = editions.editionIdFor(language);
+    if (editionId == null) return null;
     final available = editions.availableVerseKeys(language);
+    // 要求**每一节**都能查到：半个片段用译本、半个片段用机器翻译会让来源标记
+    // 含混不清，宁可整体回退机器翻译。
+    final parts = <String>[];
+    String? publisher;
+    String? version;
     for (final match in matches) {
       if (available != null && !available.contains(match.ref)) return null;
       final found = await editions.find(verseKey: match.ref, language: language);
       if (found == null) return null;
-    }
-    // 多节时按顺序拼接，保持子段顺序。
-    final parts = <String>[];
-    for (final match in matches) {
-      final found = await editions.find(verseKey: match.ref, language: language);
-      if (found == null) return null;
       parts.add(found.text);
+      publisher ??= found.translator;
+      version ??= found.version;
     }
+    if (parts.isEmpty) return null;
     return VerseTranslation(
-      editionId: editions.editionId!,
-      translator: 'unknown',
-      version: 'unknown',
+      editionId: editionId,
+      translator: publisher ?? editionId,
+      version: version ?? 'unknown',
       language: language,
       verseKey: matches.map((match) => match.ref).join(','),
       text: parts.join(' '),
@@ -531,7 +534,7 @@ class TranslationCoordinator {
   }) async {
     await records.saveTranslation(
       RecordTranslation(
-        id: '${record.id}:${record.revision}:${language.code}:$provider',
+        id: '${record.id}:${record.revision}:${language.id}:$provider',
         recordId: record.id,
         revision: record.revision,
         targetLanguage: language,

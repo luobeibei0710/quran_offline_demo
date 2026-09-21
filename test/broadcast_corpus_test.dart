@@ -26,46 +26,55 @@ class _RecordingBundle extends CachingAssetBundle {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('BroadcastQuranLibrary 资源完整性', () {
+  group('全经语料库完整性', () {
     late BroadcastQuranLibrary library;
 
     setUpAll(() async {
       library = await BroadcastQuranLibrary.load();
     });
 
-    test('覆盖第 1、67、112 章共 41 节，节号连续且唯一', () {
-      expect(library.verses, hasLength(41));
-      expect(library.manifest.verseCount, 41);
-      expect(library.manifest.surahs, <int>[1, 67, 112]);
-      expect(library.manifest.corpusId, 'tanzil-1.1-uthmani-surah-001-067-112');
-      expect(library.manifest.corpusVersion, '1.1');
+    test('覆盖 114 章 6236 节，节号连续且唯一', () {
+      expect(library.verses, hasLength(6236));
+      expect(library.manifest.verseCount, 6236);
+      expect(library.manifest.surahCount, 114);
+      expect(library.chapters, hasLength(114));
+      expect(library.manifest.corpusId, 'tanzil-1.1-uthmani-full');
 
       final refs = <String>[for (final verse in library.verses) verse.ref];
-      expect(refs.toSet(), hasLength(41));
+      expect(refs.toSet(), hasLength(6236));
 
-      const expected = <int, int>{1: 7, 67: 30, 112: 4};
-      for (final entry in expected.entries) {
-        final verses = library.versesOfSurah(entry.key)!;
-        expect(verses, hasLength(entry.value));
-        expect(
-          <int>[for (final verse in verses) verse.ayah],
-          <int>[for (var ayah = 1; ayah <= entry.value; ayah++) ayah],
-        );
+      for (final chapter in library.chapters.values) {
+        final verses = library.versesOfSurah(chapter.surah)!;
+        expect(verses, hasLength(chapter.ayahCount), reason: '第 ${chapter.surah} 章节数不符');
+        expect(verses.first.ayah, 1);
+        expect(verses.last.ayah, chapter.ayahCount);
       }
     });
 
-    test('新库只含三章，其他章明确不可用（不回退旧库）', () {
-      for (final surah in <int>[2, 18, 36, 55, 68, 114]) {
-        expect(library.versesOfSurah(surah), isNull, reason: '第 $surah 章不属于新库');
-        expect(library.verse(surah, 1), isNull);
-        expect(library.tokensFor(surah, 1, 1), isNull);
-      }
+    test('章名元数据可用于界面展示', () {
+      // 转写按数据源原文（拼写包含长音 aa），不做「美化」以免与上游不一致。
+      expect(library.chapter(112)!.nameTransliterated, 'Al-Ikhlaas');
+      expect(library.chapter(67)!.nameTransliterated, 'Al-Mulk');
+      expect(library.chapter(1)!.nameEnglish, 'The Opening');
+      expect(library.chapter(1)!.label, '第 1 章 Al-Faatiha');
     });
 
-    test('每一节都有 token 序列，且解码回原文', () {
-      for (final verse in library.verses) {
-        final tokens = library.tokensFor(verse.surah, verse.ayah, verse.ayah);
-        expect(tokens, isNotNull, reason: '${verse.ref} 缺少 token 序列');
+    test('每一节都有 token 序列，抽查可解码回原文', () {
+      final refs = <String>[
+        '1:1',
+        '2:255',
+        '36:1',
+        '55:1',
+        '67:1',
+        '112:1',
+        '114:6',
+      ];
+      for (final ref in refs) {
+        final parts = ref.split(':');
+        final surah = int.parse(parts[0]);
+        final ayah = int.parse(parts[1]);
+        final tokens = library.tokensFor(surah, ayah, ayah);
+        expect(tokens, isNotNull, reason: '$ref 缺少 token 序列');
         expect(tokens, isNotEmpty);
         final decoded = <String>[
           for (final id in tokens!)
@@ -74,56 +83,57 @@ void main() {
         ].join().replaceAll('\u2581', ' ');
         expect(
           QuranText.normalize(decoded),
-          QuranText.normalize(verse.textUthmani),
-          reason: '${verse.ref} token 往返不一致',
+          QuranText.normalize(library.verse(surah, ayah)!.textUthmani),
+          reason: '$ref token 往返不一致',
         );
       }
+      // 全量存在性：每节至少有一条单节 token 序列。
+      var missing = 0;
+      for (final verse in library.verses) {
+        if (library.tokensFor(verse.surah, verse.ayah, verse.ayah) == null) missing++;
+      }
+      expect(missing, 0, reason: '有 $missing 节缺少 token 序列');
     });
 
-    test('章首太斯米与首节主体被分开，节数不增加', () {
-      final opening = library.structure(67, 1)!;
-      final ikhlas = library.structure(112, 1)!;
-      expect(opening.hasOpening, isTrue);
-      expect(opening.openingWords, BroadcastQuranLibrary.bismillahWords);
-      expect(opening.bodyWords, isNotEmpty);
-      expect(ikhlas.hasOpening, isTrue);
-      expect(ikhlas.openingWords, BroadcastQuranLibrary.bismillahWords);
-      expect(ikhlas.bodyWords, QuranText.normalize('قل هو الله احد').split(' '));
+    test('章首太斯米按文本判定：112 节带引导，1:1 与 9:1 不带', () {
+      // 上游除第 1 章（太斯米即 1:1）与第 9 章（忏悔章无太斯米）外，
+      // 其余 112 章的章首节都带太斯米前缀。
+      var prefixed = 0;
+      for (var surah = 1; surah <= 114; surah++) {
+        if (library.hasChapterOpening(surah, 1)) prefixed++;
+      }
+      expect(prefixed, 112);
+      expect(library.hasChapterOpening(1, 1), isFalse);
+      expect(library.hasChapterOpening(9, 1), isFalse);
+      expect(library.hasChapterOpening(2, 1), isTrue);
 
-      // 开端章的太斯米属于 1:1 本身，不能当成章首引导额外剥离。
       final fatihah = library.structure(1, 1)!;
       expect(fatihah.hasOpening, isFalse);
       expect(fatihah.bodyWords, BroadcastQuranLibrary.bismillahWords);
 
-      // 无前缀的普通节不带引导。
-      expect(library.structure(67, 2)!.hasOpening, isFalse);
-      expect(library.structure(67, 2)!.openingWords, isEmpty);
+      final baqarah = library.structure(2, 1)!;
+      expect(baqarah.hasOpening, isTrue);
+      expect(baqarah.openingWords, BroadcastQuranLibrary.bismillahWords);
+      expect(baqarah.bodyWords, isNotEmpty);
+      expect(baqarah.allWords.length, greaterThan(fatihah.allWords.length));
+
+      // 无前缀的普通节也要返回结构（引导为空），而不是 null。
+      final plain = library.structure(2, 2)!;
+      expect(plain.hasOpening, isFalse);
+      expect(plain.allWords, isNotEmpty);
     });
 
     test('原样保留上游 sourceText，不改写', () async {
       final raw =
-          jsonDecode(
-                await rootBundle.loadString(
-                  '${BroadcastQuranLibrary.assetDir}/verses_001_067_112.json',
-                ),
-              )
+          jsonDecode(await rootBundle.loadString('${BroadcastQuranLibrary.assetDir}/quran.json'))
               as Map<String, dynamic>;
-      final verses = raw['verses'] as List<dynamic>;
-      for (final item in verses) {
+      var mismatched = 0;
+      for (final item in raw['verses'] as List<dynamic>) {
         final map = item as Map<String, dynamic>;
-        expect(
-          library.verse(map['surah'] as int, map['ayah'] as int)!.textUthmani,
-          map['sourceText'],
-          reason: '${map['surah']}:${map['ayah']} 的展示文本必须与上游逐字一致',
-        );
+        final verse = library.verse(map['surah'] as int, map['ayah'] as int);
+        if (verse == null || verse.textUthmani != map['sourceText']) mismatched++;
       }
-      // 67:1 的上游文本带章首太斯米前缀，派生结构把它单独识别出来。
-      expect(
-        QuranText.normalize(library.verse(67, 1)!.textUthmani).startsWith(
-          BroadcastQuranLibrary.bismillahWords.join(' '),
-        ),
-        isTrue,
-      );
+      expect(mismatched, 0, reason: '展示文本必须与上游逐字一致');
     });
   });
 
@@ -135,49 +145,55 @@ void main() {
       expect(recorder.requested, isNotEmpty);
       for (final key in recorder.requested) {
         expect(
-          key.endsWith('quran.json') || key.endsWith('quran_ctc_tokens.json'),
+          key.endsWith('quran.json') && !key.contains('broadcast_quran'),
           isFalse,
           reason: '广播功能不得读取旧库文件：$key',
+        );
+        expect(
+          key.endsWith('quran_ctc_tokens.json'),
+          isFalse,
+          reason: '广播功能不得读取旧库 token 表：$key',
         );
       }
       expect(
         recorder.requested,
         containsAll(<String>[
           '${BroadcastQuranLibrary.assetDir}/manifest.json',
-          '${BroadcastQuranLibrary.assetDir}/verses_001_067_112.json',
+          '${BroadcastQuranLibrary.assetDir}/quran.json',
           '${BroadcastQuranLibrary.assetDir}/verse_ctc_tokens.json',
         ]),
       );
       expect(recorder.requested, contains('assets/quran_offline/vocab.json'));
     });
 
-    test('注入新库索引的匹配器只在 41 节内检索', () async {
+    test('注入全经索引的匹配器只在广播语料内检索', () async {
       final library = await BroadcastQuranLibrary.load();
       final matcher = QuranMatcher(library);
-      expect(matcher.verseIndex.verses, hasLength(41));
+      expect(matcher.verseIndex.verses, hasLength(6236));
 
       final recalled = matcher.recall('قل هو الله احد');
       expect(recalled, isNotEmpty);
-      for (final entry in recalled) {
-        final verse = library.verses[entry.key];
-        expect(<int>[1, 67, 112], contains(verse.surah));
-      }
+      // 全经下 112:1 必须出现在候选里（内容完全一致）。
+      final refs = <String>[for (final entry in recalled) library.verses[entry.key].ref];
+      expect(refs, contains('112:1'));
     });
   });
 
-  group('新库 token 表清单', () {
-    test('跨度条目与节数一致，且不超过最大跨度', () async {
+  group('token 表清单', () {
+    test('跨度条目覆盖全部单节且不超过最大跨度', () async {
       final raw =
-          jsonDecode(await rootBundle.loadString(
-                '${BroadcastQuranLibrary.assetDir}/verse_ctc_tokens.json',
-              ))
+          jsonDecode(
+                await rootBundle.loadString(
+                  '${BroadcastQuranLibrary.assetDir}/verse_ctc_tokens.json',
+                ),
+              )
               as Map<String, dynamic>;
       final tokens = raw['tokens'] as Map<String, dynamic>;
       final singles = tokens.keys.where((key) {
         final parts = key.split(':');
         return parts[1] == parts[2];
       });
-      expect(singles, hasLength(41));
+      expect(singles, hasLength(6236));
       for (final key in tokens.keys) {
         final parts = key.split(':').map(int.parse).toList();
         expect(parts[2] - parts[1], inInclusiveRange(0, 3));

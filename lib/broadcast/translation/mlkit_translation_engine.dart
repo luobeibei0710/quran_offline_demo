@@ -41,33 +41,77 @@ class MlKitTranslationEngine implements OfflineTranslationEngine {
   @override
   int get generation => _generation;
 
-  /// 应用语言标签到 ML Kit 语言的映射。
+  /// 应用语言标识到 ML Kit 语言的映射。
   ///
-  /// 应用侧用 `ar / zh-Hans / en`，引擎只接受自身枚举，因此映射必须显式，
-  /// 不能假设引擎接受 `zh-Hans` 原样。
+  /// 译本目录有 62 种语言，而 ML Kit 端侧翻译只覆盖其中一部分，因此这里是**显式
+  /// 白名单**：未列出的语言查表翻译照常可用（权威译本），只是「未匹配片段」的
+  /// 机器翻译不可用，界面要如实提示而不是假装能翻。
+  static const Map<String, TranslateLanguage> _mlKitLanguages = <String, TranslateLanguage>{
+    'albanian': TranslateLanguage.albanian,
+    'bengali': TranslateLanguage.bengali,
+    'chinese': TranslateLanguage.chinese,
+    'croatian': TranslateLanguage.croatian,
+    'dutch': TranslateLanguage.dutch,
+    'english': TranslateLanguage.english,
+    'french': TranslateLanguage.french,
+    'german': TranslateLanguage.german,
+    'gujarati': TranslateLanguage.gujarati,
+    'hindi': TranslateLanguage.hindi,
+    'indonesian': TranslateLanguage.indonesian,
+    'italian': TranslateLanguage.italian,
+    'japanese': TranslateLanguage.japanese,
+    'kannada': TranslateLanguage.kannada,
+    'korean': TranslateLanguage.korean,
+    'lithuanian': TranslateLanguage.lithuanian,
+    'macedonian': TranslateLanguage.macedonian,
+    'malay': TranslateLanguage.malay,
+    'persian': TranslateLanguage.persian,
+    'portuguese': TranslateLanguage.portuguese,
+    'romanian': TranslateLanguage.romanian,
+    'russian': TranslateLanguage.russian,
+    'spanish': TranslateLanguage.spanish,
+    'swahili': TranslateLanguage.swahili,
+    'swedish': TranslateLanguage.swedish,
+    'tagalog': TranslateLanguage.tagalog,
+    'tamil': TranslateLanguage.tamil,
+    'telugu': TranslateLanguage.telugu,
+    'thai': TranslateLanguage.thai,
+    'turkish': TranslateLanguage.turkish,
+    'ukrainian': TranslateLanguage.ukrainian,
+    'urdu': TranslateLanguage.urdu,
+    'vietnamese': TranslateLanguage.vietnamese,
+  };
+
+  /// 查询语言是否支持端侧机器翻译。
   ///
   /// @param language 应用内语言
   /// @return ML Kit 语言；不支持时返回 null
-  static TranslateLanguage? mlKitLanguage(TargetLanguage language) => switch (language) {
-    TargetLanguage.simplifiedChinese => TranslateLanguage.chinese,
-    TargetLanguage.english => TranslateLanguage.english,
-  };
+  static TranslateLanguage? mlKitLanguage(TargetLanguage language) =>
+      _mlKitLanguages[language.id];
 
-  /// 目标语言所需的全部语言包（阿→中经英语中转，需要三份）。
+  /// 该语言是否支持端侧机器翻译（用于界面提示）。
+  ///
+  /// @param language 应用内语言
+  /// @return 是否支持
+  static bool supportsMachineTranslation(TargetLanguage language) =>
+      _mlKitLanguages.containsKey(language.id);
+
+  /// 目标语言所需的全部语言包。
+  ///
+  /// 非英语语言之间经英语中转，因此英语目标只需阿拉伯语 + 英语；其他目标在
+  /// 需要时还要额外的中转包（ML Kit 自行处理中转，这里只声明必需的阿拉伯语、
+  /// 英语与目标语言本身）。
   ///
   /// @param target 目标语言
-  /// @return 需要准备的 ML Kit 语言
-  static List<TranslateLanguage> requiredModels(TargetLanguage target) => switch (target) {
-    TargetLanguage.simplifiedChinese => <TranslateLanguage>[
-      TranslateLanguage.arabic,
-      TranslateLanguage.english,
-      TranslateLanguage.chinese,
-    ],
-    TargetLanguage.english => <TranslateLanguage>[
-      TranslateLanguage.arabic,
-      TranslateLanguage.english,
-    ],
-  };
+  /// @return 需要准备的 ML Kit 语言；不支持时返回空列表
+  static List<TranslateLanguage> requiredModels(TargetLanguage target) {
+    final language = mlKitLanguage(target);
+    if (language == null) return const <TranslateLanguage>[];
+    if (language == TranslateLanguage.english) {
+      return const <TranslateLanguage>[TranslateLanguage.arabic, TranslateLanguage.english];
+    }
+    return <TranslateLanguage>[TranslateLanguage.arabic, TranslateLanguage.english, language];
+  }
 
   @override
   Future<TranslationEngineStatus> statusFor(TargetLanguage target) async {

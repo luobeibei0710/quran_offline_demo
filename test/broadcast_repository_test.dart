@@ -31,7 +31,7 @@ void main() {
     String text = 'قل هو الله احد',
     MatchStatus status = MatchStatus.confirmed,
     RecordScope scope = RecordScope.completeVerses,
-    TargetLanguage language = TargetLanguage.simplifiedChinese,
+    TargetLanguage language = TargetLanguage.chinese,
     List<MatchedVerse> matches = const <MatchedVerse>[],
     RecordMetrics? metrics,
     TranslationJob? job,
@@ -148,7 +148,7 @@ void main() {
             id: 'job-1',
             recordId: 'placeholder',
             revision: 1,
-            targetLanguage: TargetLanguage.simplifiedChinese,
+            targetLanguage: TargetLanguage.chinese,
             provider: 'mlkit',
             sourceHash: 'hash-1',
             state: TranslationJobState.pending,
@@ -194,7 +194,7 @@ void main() {
           id: 'tr-1',
           recordId: record.id,
           revision: 1,
-          targetLanguage: TargetLanguage.simplifiedChinese,
+          targetLanguage: TargetLanguage.chinese,
           provider: 'mlkit',
           sourceKind: TranslationSourceKind.machineCanonical,
           sourceHash: 'h1',
@@ -211,7 +211,7 @@ void main() {
           id: 'tr-2',
           recordId: record.id,
           revision: 2,
-          targetLanguage: TargetLanguage.simplifiedChinese,
+          targetLanguage: TargetLanguage.chinese,
           provider: 'mlkit',
           sourceKind: TranslationSourceKind.machineCanonical,
           sourceHash: 'h2',
@@ -241,7 +241,7 @@ void main() {
       expect(staleLanguage, isFalse, reason: '目标语言在创建时冻结，晚到结果不得串语言');
 
       final reloaded = (await repository.byId(record.id))!;
-      expect(reloaded.translationFor(TargetLanguage.simplifiedChinese)!.text, '说：他是真主，是独一的主');
+      expect(reloaded.translationFor(TargetLanguage.chinese)!.text, '说：他是真主，是独一的主');
       expect(reloaded.translationFor(TargetLanguage.english), isNull);
     });
 
@@ -293,7 +293,7 @@ void main() {
             id: 'job-c',
             recordId: 'placeholder',
             revision: 1,
-            targetLanguage: TargetLanguage.simplifiedChinese,
+            targetLanguage: TargetLanguage.chinese,
             provider: 'mlkit',
             sourceHash: 'h',
             state: TranslationJobState.pending,
@@ -351,7 +351,7 @@ void main() {
               id: 'job-$index',
               recordId: 'placeholder',
               revision: 1,
-              targetLanguage: TargetLanguage.simplifiedChinese,
+              targetLanguage: TargetLanguage.chinese,
               provider: 'mlkit',
               sourceHash: 'h',
               state: TranslationJobState.pending,

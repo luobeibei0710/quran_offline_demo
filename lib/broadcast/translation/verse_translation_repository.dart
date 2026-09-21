@@ -53,9 +53,15 @@ class VerseTranslation {
 }
 
 /// 校订译本仓储。
+///
+/// 语言可有可无：调用方先问 [editionIdFor]，返回 null 就说明该语言没有可用译本，
+/// 应回退到机器翻译。
 abstract interface class VerseTranslationRepository {
-  /// 译本标识；无可用译本时返回 null。
-  String? get editionId;
+  /// 某语言使用的译本标识；该语言无译本时返回 null。
+  ///
+  /// @param language 目标语言
+  /// @return 译本标识或 null
+  String? editionIdFor(TargetLanguage language);
 
   /// 查询某节某语言的完整译本。
   ///
@@ -70,20 +76,20 @@ abstract interface class VerseTranslationRepository {
   /// 列出某语言已覆盖的节键。
   ///
   /// @param language 目标语言
-  /// @return 节键集合；无该语言译本时返回 null
+  /// @return 节键集合；无该语言译本或范围未知时返回 null
   Set<String>? availableVerseKeys(TargetLanguage language);
 }
 
-/// 当前没有可分发校订译本时的空实现。
+/// 没有可分发校订译本时的空实现。
 ///
-/// 恒返回 null，让所有译文都走 ML Kit 并带 `machineCanonical` / `machineAsr`
-/// 来源标记，不会出现「假装是校订译本」的情况。
+/// 恒返回 null，让所有译文都走机器翻译并带 `machineCanonical` / `machineAsr`
+/// 来源标记，不会出现「假装是校订译本」的情况。测试与无数据场景使用。
 class NoCuratedEditionRepository implements VerseTranslationRepository {
   /// 构造空实现。
   const NoCuratedEditionRepository();
 
   @override
-  String? get editionId => null;
+  String? editionIdFor(TargetLanguage language) => null;
 
   @override
   Future<VerseTranslation?> find({

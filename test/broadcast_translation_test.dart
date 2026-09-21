@@ -61,14 +61,14 @@ class _FakeEditions implements VerseTranslationRepository {
   final Map<String, String> entries;
 
   @override
-  String? get editionId => edition;
+  String? editionIdFor(TargetLanguage language) => edition;
 
   @override
   Future<VerseTranslation?> find({
     required String verseKey,
     required TargetLanguage language,
   }) async {
-    final text = entries['${language.code}:$verseKey'];
+    final text = entries['${language.id}:$verseKey'];
     if (text == null) return null;
     return VerseTranslation(
       editionId: edition!,
@@ -108,7 +108,7 @@ void main() {
     MatchStatus status = MatchStatus.confirmed,
     RecordScope scope = RecordScope.completeVerses,
     List<MatchedVerse> matches = const <MatchedVerse>[],
-    TargetLanguage language = TargetLanguage.simplifiedChinese,
+    TargetLanguage language = TargetLanguage.chinese,
     String utteranceId = 'utt',
   }) => records.save(
     RecordDraft(
@@ -170,10 +170,10 @@ void main() {
       final status = await coordinator.runJob((await records.pendingJobs()).single);
       expect(status, TranslationStatus.done);
 
-      final input = await coordinator.resolveInput(record, TargetLanguage.simplifiedChinese);
+      final input = await coordinator.resolveInput(record, TargetLanguage.chinese);
       expect(input.sourceKind, TranslationSourceKind.machineAsr);
       expect(input.text, 'هذا كلام عادي');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.simplifiedChinese)!;
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.machineAsr);
       expect(translation.status, TranslationStatus.done);
       expect(translation.text, startsWith('译:'));
@@ -194,7 +194,7 @@ void main() {
       // 输入必须是新库标准原文（保留音标），不是归一化后的 ASR 文本。
       expect(request.inputText, library.verse(112, 1)!.textUthmani);
       expect(request.inputText, isNot(QuranTextNormalized.ikhlas1));
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.simplifiedChinese)!;
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.machineCanonical);
     });
 
@@ -217,7 +217,7 @@ void main() {
           .toList();
       expect(request.inputText, words.sublist(4, 7).join(' '));
       expect(request.inputText, isNot(library.verse(112, 1)!.textUthmani));
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.simplifiedChinese)!;
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.inputScope, 'confirmedRange');
     });
 
@@ -225,7 +225,7 @@ void main() {
       final engine = _FakeEngine();
       final editions = _FakeEditions(
         edition: 'test-zh',
-        entries: <String, String>{'zh-Hans:112:1': '说：他是真主，是独一的主'},
+        entries: <String, String>{'chinese:112:1': '说：他是真主，是独一的主'},
       );
       final coordinator = coordinatorWith(engine, editions: editions);
       final record = await saveRecord(matches: <MatchedVerse>[verse(112, 1)]);
@@ -233,7 +233,7 @@ void main() {
 
       expect(status, TranslationStatus.done);
       expect(engine.requests, isEmpty, reason: '命中校订译本不得再调用机器翻译');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.simplifiedChinese)!;
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.curatedEdition);
       expect(translation.text, '说：他是真主，是独一的主');
       expect(translation.editionId, 'test-zh');
@@ -254,7 +254,7 @@ void main() {
       expect(status, TranslationStatus.modelMissing);
       final reloaded = (await records.byId(record.id))!;
       expect(reloaded.rawAsrText, isNotEmpty, reason: '翻译失败不丢转写与原文');
-      final translation = reloaded.translationFor(TargetLanguage.simplifiedChinese)!;
+      final translation = reloaded.translationFor(TargetLanguage.chinese)!;
       expect(translation.status, TranslationStatus.modelMissing);
       expect(translation.errorCode, 'modelMissing');
       expect(translation.status.canRetry, isTrue);
@@ -272,10 +272,10 @@ void main() {
 
       final recovered = _FakeEngine();
       final retryCoordinator = coordinatorWith(recovered);
-      final ok = await retryCoordinator.retry(record.id, TargetLanguage.simplifiedChinese);
+      final ok = await retryCoordinator.retry(record.id, TargetLanguage.chinese);
       expect(ok, isTrue);
       expect(await records.count(), 1, reason: '重试不得新建记录');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.simplifiedChinese)!;
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.status, TranslationStatus.done);
       expect(translation.text, startsWith('译:'));
     });
@@ -312,8 +312,8 @@ void main() {
       await coordinator.runJob((await records.pendingJobs()).single);
       expect(engine.requests, hasLength(1), reason: '同一输入应命中缓存');
 
-      expect((await records.byId(first.id))!.translationFor(TargetLanguage.simplifiedChinese), isNotNull);
-      expect((await records.byId(second.id))!.translationFor(TargetLanguage.simplifiedChinese), isNotNull);
+      expect((await records.byId(first.id))!.translationFor(TargetLanguage.chinese), isNotNull);
+      expect((await records.byId(second.id))!.translationFor(TargetLanguage.chinese), isNotNull);
     });
 
     test('缓存键包含语料版本、语言、提供方与预处理版本', () async {
@@ -326,14 +326,14 @@ void main() {
       );
       final key = coordinator.cacheKeyFor(
         input,
-        TargetLanguage.simplifiedChinese,
+        TargetLanguage.chinese,
         provider: 'mlkit',
         engineId: 'fake/1',
         generation: 2,
       );
       expect(key, contains(library.manifest.corpusId));
       expect(key, contains(library.manifest.corpusVersion));
-      expect(key, contains('zh-Hans'));
+      expect(key, contains('chinese'));
       expect(key, contains('mlkit'));
       expect(key, contains('gen2'));
       expect(key, contains(TranslationPreprocessor.version));

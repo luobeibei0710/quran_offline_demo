@@ -59,8 +59,9 @@ class BroadcastMatchConfig {
   /// @param minFallbackTextScore 候选回退所需的最低文本得分
   /// @param minFallbackPrecision 候选回退所需的最低解释比例（防止极短节误回退）
   /// @param runnerUpLimit 参与上层裁决的候选数上限（含多节跨度候选）
+  /// @param recallLengthFitWeight 召回打分里「长度匹配度」的权重，用于抑制极短节
   const BroadcastMatchConfig({
-    this.topK = 32,
+    this.topK = 64,
     this.maxSpan = 4,
     this.spanPenalty = 0.1,
     this.minPrecision = 0.6,
@@ -73,7 +74,8 @@ class BroadcastMatchConfig {
     this.minFallbackCoverage = 0.4,
     this.minFallbackTextScore = 0.35,
     this.minFallbackPrecision = 0.3,
-    this.runnerUpLimit = 48,
+    this.runnerUpLimit = 96,
+    this.recallLengthFitWeight = 0.25,
   });
 
   /// 参与精排的候选数。
@@ -122,10 +124,17 @@ class BroadcastMatchConfig {
 
   /// 参与上层裁决的候选数上限。
   ///
-  /// 取 48 而不是 matcher 默认的 12：真机上短节因为按帧归一化的分数更优会占满
-  /// 前 12 名，导致多节跨度候选进不了裁决池。本次真机测试中「转写 25 词被匹配成
+  /// 取 96（全经规模）而不是 matcher 默认的 12：短节因为按帧归一化的分数更优会占满
+  /// 排名靠前的位置，导致多节跨度候选进不了裁决池。真机实测「转写 25 词被匹配成
   /// 7 词单节（F1 0.438）」即由此产生。
   final int runnerUpLimit;
+
+  /// 召回打分里「长度匹配度」的权重。
+  ///
+  /// 全经 6236 节里有 553 个 ≤3 词的极短节；按覆盖率召回时它们会垄断候选池
+  /// （长转写命中一两个常见词就接近满分覆盖率）。加入长度匹配度后，词数与转写
+  /// 接近的经节才会得到高分。设为 0 可退回旧库语义。
+  final double recallLengthFitWeight;
 }
 
 /// 一次匹配的完整结果。
@@ -225,7 +234,7 @@ class QuranMatchService {
   /// @param library 独立三章语料库
   /// @param config 判定参数
   QuranMatchService({required this.library, this.config = const BroadcastMatchConfig()})
-    : _matcher = QuranMatcher(library);
+    : _matcher = QuranMatcher(library, lengthFitWeight: config.recallLengthFitWeight);
 
   /// 语料库。
   final BroadcastQuranLibrary library;

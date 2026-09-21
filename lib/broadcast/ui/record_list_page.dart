@@ -201,8 +201,8 @@ class _RecordListPageState extends State<RecordListPage> {
                   onChanged: (value) => setState(() => _languageFilter = value),
                   items: <DropdownMenuItem<TargetLanguage?>>[
                     const DropdownMenuItem<TargetLanguage?>(child: Text('全部语言')),
-                    for (final language in TargetLanguage.values)
-                      DropdownMenuItem<TargetLanguage?>(value: language, child: Text(language.label)),
+                    for (final language in TargetLanguage.all)
+                      DropdownMenuItem<TargetLanguage?>(value: language, child: Text(language.displayName)),
                   ],
                 ),
                 const SizedBox(width: 12),
@@ -302,7 +302,7 @@ class _RecordTile extends StatelessWidget {
               color: theme.colorScheme.secondaryContainer,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(record.targetLanguage.label, style: theme.textTheme.labelSmall),
+            child: Text(record.targetLanguage.displayName, style: theme.textTheme.labelSmall),
           ),
           const Spacer(),
           Text(record.matchSummary, style: theme.textTheme.bodySmall),
