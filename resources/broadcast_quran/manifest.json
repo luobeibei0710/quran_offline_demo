@@ -18,6 +18,7 @@
     "preservedNotice": true
   },
   "appIntegrated": false,
+  "appIntegrationNote": "本字段针对上面 text 块里的三章节选派生文件（verses_001_067_112.json），它没有接入 App，仅作上游归档。App 实际随包分发的是由同一份 Tanzil 快照生成的全经语料 assets/broadcast_quran/full/（114 章 6236 节），生成脚本 tools/broadcast_quran/build_full_corpus.py。",
   "audio": {
     "retrievedAt": "2026-09-21T08:35:00Z",
     "source": {

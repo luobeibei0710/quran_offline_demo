@@ -39,7 +39,7 @@ class _QuranComparePageState extends State<QuranComparePage> {
   /// 转写覆盖率低于该值时提示「指标仅供参考」。
   ///
   /// 覆盖率低通常是抓音问题（VAD 跳过多数窗口）而非比对算法问题，
-  /// 见 `docs/android-device.md` 的实测数据。
+  /// 见 `docs/platform-android.md` 的实测数据。
   static const double _lowCoverageThreshold = 0.35;
 
   ReferenceText? _reference;

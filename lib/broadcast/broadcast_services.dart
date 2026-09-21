@@ -3,8 +3,9 @@
 /// 页面不得直接操作 ORT、下载模型或执行 SQL —— 全部依赖在这里创建一次，
 /// 由应用级单实例持有。
 ///
-/// 关键隔离点：本文件为匹配与语料只注入 [BroadcastQuranLibrary]（三章 41 节），
-/// 只复用 ASR 模型侧资源（`vocab.json` 与 ONNX 模型），**不加载**旧经文库
+/// 关键隔离点：本文件为匹配与语料只注入 [BroadcastQuranLibrary]
+/// （全经 114 章 6236 节），只复用 ASR 模型侧资源（`vocab.json` 与 ONNX 模型），
+/// **不加载**旧经文库
 /// `quran.json` / `quran_ctc_tokens.json`。
 library;
 
@@ -47,7 +48,7 @@ class BroadcastServices {
   /// 目标语言偏好在设置表中的键。
   static const String languageSettingKey = 'broadcast_target_language';
 
-  /// 独立三章语料库。
+  /// 全经语料库（114 章 6236 节）。
   final BroadcastQuranLibrary library;
 
   /// 本地数据库。

@@ -147,7 +147,7 @@ void main() {
       // 「未匹配」，而内容其实在库里。
       final tokens = <int>[
         ...tokensOf(112, 1, 1),
-        // 库外词（词表内但三章经文不含）：制造「转写多出词」的局面。
+        // 库外词（词表内，但在语料库中匹配不到）：制造「转写多出词」的局面。
         1015, 1020, 1022, 1023, 1015, 1020, 1022, 1023,
       ];
       final outcome = await matchTokens(tokens);
@@ -178,7 +178,7 @@ void main() {
     });
 
     test('库外内容不返回最相似经文（不回退旧库）', () async {
-      // 用词表中存在、但三章经文中几乎不出现的常见词拼出「普通讲话」。
+      // 用词表中存在、但在语料库中几乎不出现的常见词拼出「普通讲话」。
       final filler = <int>[19, 21, 30, 43];
       final outcome = await matchTokens(filler);
       expect(outcome.status, MatchStatus.unmatched);

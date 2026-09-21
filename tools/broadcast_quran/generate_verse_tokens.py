@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
-"""Generate the CTC token table for the broadcast (three-surah) library.
+"""Generate the CTC token table for the broadcast (full-Quran) corpus.
 
-The upstream Tilawa release ships ``quran_ctc_tokens.json`` only for the full
-6236-verse library.  The broadcast feature must not read that library, so this
-tool rebuilds token sequences for the independent 41-verse corpus from the same
-1025-token vocabulary using the same encoding rule.
+The upstream Tilawa release ships ``quran_ctc_tokens.json`` alongside its own
+Quran library, but its token scores are not published and the broadcast feature
+must not read that library at all.  This tool therefore rebuilds token sequences
+for the independent Tanzil corpus from the shared 1025-token vocabulary using a
+deterministic encoding rule.
 
-Encoding rule (verified against the upstream table by ``--verify-legacy``):
+Encoding rule (compared against the upstream table by ``--verify-legacy``):
 a verse is normalized exactly like ``QuranText.normalize``, split on spaces,
 and every word is encoded by greedy longest-prefix matching against the
 vocabulary with an added word-start marker (U+2581).  Unknown code points fall
 back to the ``<unk>`` id without changing the surrounding matches, so a verse
 that cannot be encoded is reported instead of silently truncated.
 
+Because the token scores differ from upstream, the resulting ordering scores are
+on a different absolute scale: match thresholds must be calibrated against this
+table, never copied from the legacy library.
+
 Usage:
-    # self-check against the upstream table (must be 100% identical)
+    # self-check the encoder against the upstream table
     python3 tools/broadcast_quran/generate_verse_tokens.py --verify-legacy
 
-    # build the new corpus table
+    # build the full-corpus table shipped with the app
     python3 tools/broadcast_quran/generate_verse_tokens.py \
-        --verses resources/broadcast_quran/tanzil_1_1/verses_001_067_112.json \
+        --verses assets/broadcast_quran/full/quran.json \
         --vocab assets/quran_offline/vocab.json \
-        --output assets/broadcast_quran/tanzil_1_1/verse_ctc_tokens.json
+        --output assets/broadcast_quran/full/verse_ctc_tokens.json \
+        --max-span 8
 """
 
 from __future__ import annotations
@@ -298,13 +304,13 @@ def main() -> int:
     parser.add_argument("--strategy", default="min-token", choices=("min-token", "greedy"))
     parser.add_argument(
         "--verses",
-        default=str(REPO_ROOT / "resources" / "broadcast_quran" / "tanzil_1_1" / "verses_001_067_112.json"),
+        default=str(REPO_ROOT / "assets" / "broadcast_quran" / "full" / "quran.json"),
     )
     parser.add_argument(
         "--vocab", default=str(REPO_ROOT / "assets" / "quran_offline" / "vocab.json")
     )
     parser.add_argument("--output", default=None)
-    parser.add_argument("--max-span", type=int, default=4)
+    parser.add_argument("--max-span", type=int, default=8)
     args = parser.parse_args()
 
     if args.verify_legacy:
@@ -315,7 +321,7 @@ def main() -> int:
 
     vocab = load_vocab(Path(args.vocab))
     corpus = json.loads(Path(args.verses).read_text(encoding="utf-8"))
-    encoder = TokenEncoder(vocab)
+    encoder = TokenEncoder(vocab, strategy=args.strategy)
     table, problems = build_table(corpus["verses"], encoder, args.max_span)
 
     wanted = {f"{v['surah']}:{v['ayah']}" for v in corpus["verses"]}

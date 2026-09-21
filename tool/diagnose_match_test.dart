@@ -88,10 +88,7 @@ void main() {
           'champion: ${champion == null ? '无' : '${champion.surah}:${champion.ayahStart}-${champion.ayahEnd}'}'
           '  score=${champion?.sortScore.toStringAsFixed(3) ?? '-'}',
         );
-        final all = <VerseMatchCandidate>[
-          if (champion != null) champion,
-          ...result.runnersUp,
-        ];
+        final all = <VerseMatchCandidate>[?champion, ...result.runnersUp];
         stdout.writeln('候选总数 ${all.length}；第 $focusSurah 章的候选：');
         for (var rank = 0; rank < all.length; rank++) {
           final candidate = all[rank];

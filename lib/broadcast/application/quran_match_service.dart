@@ -1,6 +1,6 @@
 /// 广播片段 → 独立新库经文匹配：召回 + CTC 精排 + 候选裁决 + 可信判定 + 指标。
 ///
-/// 只在注入的 [BroadcastQuranLibrary]（三章 41 节）内检索；检索不到时返回
+/// 只在注入的 [BroadcastQuranLibrary]（全经 114 章 6236 节）内检索；检索不到时返回
 /// [MatchStatus.unmatched] 并保留真实 ASR 转写，**不会**回退旧经文库，也不会
 /// 返回「任意最相似的经文」。
 ///
@@ -18,9 +18,9 @@
 /// - 候选 B：`112:1` = 太斯米 + 正文（10 个 token）
 ///
 /// A 的按帧分数更优（它只用到高概率的前 5 个位置），于是纯太斯米节会抢走所有
-/// 以相同开头起诵的长片段。旧库没有暴露这个问题，是因为 6236 节里 1:1 与
-/// 长节同时进入 top-K 的概率很低；新库只有 3 章、41 节，太斯米在 67:1、112:1
-/// 都会出现，冲突概率极高。
+/// 以相同开头起诵的长片段。全经有 112 节带章首太斯米前缀，其中 `1:1` 是太斯米
+/// 本身，`67:1`、`112:1` 等则是「太斯米 + 正文」结构，这个冲突在真实音频里
+/// 会稳定复现。
 ///
 /// 因此这里在 CTC 精排之后增加一层裁决：先按「转写被候选解释的比例」
 /// （precision）分带，同带内再比 CTC 排序分。这同时满足需求中的
@@ -253,7 +253,7 @@ class BroadcastMatchOutcome {
 class QuranMatchService {
   /// 构造匹配服务。
   ///
-  /// @param library 独立三章语料库
+  /// @param library 全经语料库（114 章 6236 节）
   /// @param config 判定参数
   QuranMatchService({required this.library, this.config = const BroadcastMatchConfig()})
     : _matcher = QuranMatcher(

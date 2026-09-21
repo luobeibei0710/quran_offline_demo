@@ -303,7 +303,7 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     if (recent == null) {
       return const TextSectionCard(
         title: '匹配经文',
-        subtitle: '新库：开端章 / 王权章 / 纯洁章（41 节）',
+        subtitle: '新库：全经 114 章 6236 节（Tanzil 1.1）',
         body: '',
         rtl: true,
         emptyHint: '匹配到经文后，这里显示新库的标准阿拉伯原文（含音标）与章节范围。',
@@ -350,8 +350,8 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
           title: '目标译文',
           subtitle: '${language.displayName} · 等待匹配经文',
           body: '',
-          emptyHint: '预览译文跟随匹配经文：当前片段尚未命中库内三章'
-              '（可能是章前求护词、解说词或其他章节），命中后自动翻译对应标准原文。',
+          emptyHint: '预览译文跟随匹配经文：当前片段尚未命中全经任何节'
+              '（可能是章前求护词、解说词或其他内容），命中后自动翻译对应标准原文。',
         );
       }
       if (preview.translationText != null && preview.translationText!.isNotEmpty) {
@@ -424,12 +424,24 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     );
   }
 
-  static String _surahLabel(int surah) => switch (surah) {
-    1 => '第 1 章 开端章',
-    67 => '第 67 章 王权章',
-    112 => '第 112 章 纯洁章',
-    _ => '第 $surah 章',
-  };
+  /// 章节标题文案：中文习称优先，其余章用全经语料自带的拉丁转写章名。
+  ///
+  /// 章名来自语料库（[BroadcastQuranLibrary.chapters]，数据驱动），
+  /// 因此新增或更换语料不需要改代码；只有少数章另给中文习称。
+  ///
+  /// @param surah 章号
+  /// @return 形如「第 36 章 Ya-Sin」的展示文案
+  String _surahLabel(int surah) {
+    final alias = switch (surah) {
+      1 => '开端章',
+      67 => '王权章',
+      112 => '纯洁章',
+      _ => null,
+    };
+    if (alias != null) return '第 $surah 章 $alias';
+    final name = widget.services.library.chapter(surah)?.nameTransliterated ?? '';
+    return name.isEmpty ? '第 $surah 章' : '第 $surah 章 $name';
+  }
 }
 
 /// 详情页跳转辅助（首页与列表共用）。

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Build the whole-Quran broadcast corpus from the archived Tanzil snapshot.
 
-The broadcast feature originally shipped three surahs.  The product decision is
-now "match the whole Quran", so this tool turns the already-downloaded Tanzil
-full snapshot into the corpus JSON the app consumes:
+The broadcast feature matches against the whole Quran, so this tool turns the
+already-downloaded Tanzil full snapshot into the corpus JSON the app consumes:
 
-* verses            — 6236 entries, upstream text kept verbatim;
-* chapter metadata   — Arabic name / transliteration / English name;
+* verses              — 6236 entries, upstream text kept verbatim;
+* chapter metadata    — Arabic name / transliteration / English name;
 * chapter-opening flag — computed from the text itself, never hard-coded.
 
 The chapter-opening flag matters because Tanzil's text puts the Basmala at the
@@ -195,7 +194,7 @@ def build_manifest(document: dict, token_table: Path) -> dict:
             "由 tools/broadcast_quran/generate_verse_tokens.py 从 assets/quran_offline/vocab.json "
             "与全经语料独立生成，不含旧经文库的任何文本或索引。上游 unigram 分词分数未公开，"
             "本表用确定性最少 token 数分词，因此排序分数的绝对值口径与旧库不同；"
-            "跨度惩罚与跨度上限的标定见 docs/broadcast-implementation-20260921.md。"
+            "跨度惩罚与跨度上限的标定见 docs/matching.md。"
         ),
         "chapterMetadata": document["chapterMetadata"],
     }

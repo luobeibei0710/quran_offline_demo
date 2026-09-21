@@ -96,7 +96,7 @@ class TranslationCoordinator {
   ///
   /// @param engine 离线翻译引擎
   /// @param records 记录仓储
-  /// @param library 独立三章语料库（提供标准原文）
+  /// @param library 全经语料库（提供标准原文）
   /// @param editions 校订译本仓储
   /// @param allowDownload 是否允许联网准备语言包（仅准备阶段）
   TranslationCoordinator({
