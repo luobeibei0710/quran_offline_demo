@@ -57,6 +57,8 @@ class BroadcastMatchConfig {
   /// @param marginWeight 可信度中候选差距的权重
   /// @param minFallbackCoverage 候选回退所需的最低覆盖率
   /// @param minFallbackTextScore 候选回退所需的最低文本得分
+  /// @param minFallbackPrecision 候选回退所需的最低解释比例（防止极短节误回退）
+  /// @param runnerUpLimit 参与上层裁决的候选数上限（含多节跨度候选）
   const BroadcastMatchConfig({
     this.topK = 32,
     this.maxSpan = 4,
@@ -70,6 +72,8 @@ class BroadcastMatchConfig {
     this.marginWeight = 0.3,
     this.minFallbackCoverage = 0.4,
     this.minFallbackTextScore = 0.35,
+    this.minFallbackPrecision = 0.3,
+    this.runnerUpLimit = 48,
   });
 
   /// 参与精排的候选数。
@@ -107,6 +111,21 @@ class BroadcastMatchConfig {
 
   /// 候选回退的最低文本得分。
   final double minFallbackTextScore;
+
+  /// 候选回退的最低解释比例。
+  ///
+  /// 真机实测动机：覆盖率对小节有系统性偏向 —— 对 2 个词的节（如 `1:3`
+  /// 「الرحمن الرحيم」），长转写里随便命中几个常见词就能得到 0.8+ 覆盖率。
+  /// 因此回退必须同时要求候选能解释至少三成转写，否则宁可显示「未匹配」，
+  /// 也不要把极短节当成候选经文展示给用户。
+  final double minFallbackPrecision;
+
+  /// 参与上层裁决的候选数上限。
+  ///
+  /// 取 48 而不是 matcher 默认的 12：真机上短节因为按帧归一化的分数更优会占满
+  /// 前 12 名，导致多节跨度候选进不了裁决池。本次真机测试中「转写 25 词被匹配成
+  /// 7 词单节（F1 0.438）」即由此产生。
+  final int runnerUpLimit;
 }
 
 /// 一次匹配的完整结果。
@@ -245,6 +264,8 @@ class QuranMatchService {
         topK: config.topK,
         maxSpan: config.maxSpan,
         spanPenalty: config.spanPenalty,
+        // 放大次优候选数量：否则长跨度候选进不了下面的裁决池。
+        runnerUpLimit: config.runnerUpLimit,
       );
       if (result.champion == null) continue;
       final current = bestResult?.champion;
@@ -278,6 +299,7 @@ class QuranMatchService {
       final fallback = <_Candidate>[
         for (final candidate in candidates)
           if (candidate.coverage >= config.minFallbackCoverage &&
+              candidate.precision >= config.minFallbackPrecision &&
               candidate.match.textScore >= config.minFallbackTextScore &&
               candidate.alignment.matchCount + candidate.alignment.nearCount >=
                   config.minContentWords)

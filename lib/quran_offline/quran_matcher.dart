@@ -146,6 +146,13 @@ class QuranMatcher {
   /// 默认最大连读跨度（节）。
   static const int defaultMaxSpan = 4;
 
+  /// 默认返回的次优候选数量上限。
+  ///
+  /// 旧库沿用 12；广播功能会放大该值，因为它的上层次裁决需要看到**长跨度**候选 ——
+  /// 真机实测中短节因按帧归一化的分数更优而占满前 12 名，导致真正的多节跨度候选
+  /// 进不了裁决池，长转写被匹配成 7 词单节。
+  static const int defaultRunnerUpLimit = 12;
+
   /// 置信度映射用的**相对**差距：与次优的排序分差距达到最优分的该比例即认为非常明确。
   ///
   /// 用相对值而非绝对值，是为了与打分口径/窗口长度解耦 —— 分数是「每帧」量纲，
@@ -266,6 +273,7 @@ class QuranMatcher {
   /// @param topK 参与 CTC 精排的候选数
   /// @param maxSpan 最大连读跨度（节）
   /// @param spanPenalty 跨度惩罚系数（见 [defaultSpanPenalty]）
+  /// @param runnerUpLimit 返回的次优候选数量上限；调用方可放大以扩大上层裁决池
   /// @return 匹配结果
   VerseMatchResult match(
     AcousticEvidence evidence,
@@ -273,6 +281,7 @@ class QuranMatcher {
     int topK = defaultTopK,
     int maxSpan = defaultMaxSpan,
     double spanPenalty = defaultSpanPenalty,
+    int runnerUpLimit = defaultRunnerUpLimit,
   }) {
     final recalled = recall(decoded);
     if (recalled.isEmpty) {
@@ -320,7 +329,9 @@ class QuranMatcher {
     scored.sort((a, b) => a.sortScore.compareTo(b.sortScore));
     return VerseMatchResult(
       champion: scored.first,
-      runnersUp: scored.length > 1 ? scored.sublist(1, scored.length > 12 ? 12 : scored.length) : const [],
+      runnersUp: scored.length > 1
+          ? scored.sublist(1, scored.length > runnerUpLimit ? runnerUpLimit : scored.length)
+          : const [],
       decodedText: decoded,
       recallCount: recalled.length,
     );

@@ -93,6 +93,28 @@ void main() {
       expect(outcome.metrics.strictWer, isNotNull);
     });
 
+    test('长转写匹配到多节跨度，而不是被极短节抢走', () async {
+      // 真机实测动机：念王权章连续多节时（转写 25 词），终稿只匹配到 7 词的单节
+      // （67:14，F1 0.438）。原因是候选裁决只在 CTC 精排前 12 个候选里选，
+      // 而短节因为按帧归一化的分数更优占满该窗口，真正的多节跨度候选进不来。
+      final outcome = await matchTokens(tokensOf(67, 14, 17));
+      expect(outcome.matches.length, greaterThan(1), reason: '长转写应匹配到多节跨度');
+      expect(outcome.matches.first.ref, '67:14');
+      expect(outcome.coverage, greaterThan(0.8));
+      expect(outcome.precision, greaterThan(0.8));
+    });
+
+    test('长转写混入库外词时仍应选多节跨度，而不是退回极短节', () async {
+      // 更贴近真机：转写含库外词（章前求护词一类），内容跨王权章多节。
+      final tags = <int>[1015, 1020, 1022, 1023];
+      final tokens = <int>[...tokensOf(67, 14, 17), ...tags];
+      final outcome = await matchTokens(tokens);
+      expect(outcome.matches.length, greaterThan(1), reason: '不应退回单节');
+      expect(outcome.matches.first.ref, '67:14');
+      expect(outcome.precision, greaterThan(0.7));
+      expect(outcome.status, isNot(MatchStatus.unmatched));
+    });
+
     test('跨节连读保留多个引用，不只显示首节', () async {
       final outcome = await matchTokens(tokensOf(112, 1, 2));
       expect(outcome.matches.length, 2);
