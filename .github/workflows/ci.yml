@@ -7,8 +7,16 @@ on:
   workflow_dispatch:
 
 concurrency:
+  # 只有 PR 取消在跑的运行；main 上的 push 不取消。
+  #
+  # 原因：build-android / build-ios 都 needs: analyze-and-test，整条链路约 7 分钟。
+  # 全部事件都 cancel-in-progress 时，连续 push（例如连续改文档）会把上一次运行
+  # 掐断，结果只剩一堆 cancelled，永远拿不到完整结论。
+  #
+  # 同一并发组内 GitHub 仍最多保留「1 个在跑 + 1 个排队」：main 上连续 push 时，
+  # 被顶掉的是排队中的旧运行，**最新一次一定会完整跑完**。
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # 与本地验证通过的 Flutter 版本保持一致

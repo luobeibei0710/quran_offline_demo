@@ -347,6 +347,13 @@ CI 定义见 `.github/workflows/ci.yml`，三个 Job：
 > CI 只覆盖 `download_assets.sh` 提供的资产，**不含** `*_ort122.onnx` 与 `sample_*.wav`，
 > 因此 CI 产出的 APK 仅用于验证编译链路，真实识别需在本地准备全部资产。
 
+并发策略：**只有 PR 会取消在跑的运行，main 上的 push 不取消**。
+两个构建 Job 都排在 `analyze-and-test` 之后（整条链路约 7 分钟），
+如果 main 也取消，连续 push（例如连续改文档）会把上一次掐断，
+只剩一堆 `cancelled`，拿不到完整结论。同一并发组内 GitHub 最多保留
+「1 个在跑 + 1 个排队」，所以 main 上连续 push 时被顶掉的是排队中的旧运行，
+**最新一次一定会完整跑完**。
+
 ## 项目结构
 
 ```
