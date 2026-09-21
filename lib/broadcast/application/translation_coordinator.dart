@@ -4,14 +4,17 @@
 ///
 /// | 情形 | 来源 | 输入文本 |
 /// |---|---|---|
-/// | 匹配成功且该语言有授权校订译本 | `curatedEdition` | 直接查表，不过机器翻译 |
-/// | 匹配成功但译本缺失 | `machineCanonical` | 新库标准原文（保留音标与原始顺序） |
+/// | 匹配到节且有授权校订译本（整节） | `curatedEdition` | 直接查表，不过机器翻译 |
+/// | 匹配到节且有授权校订译本（半节或候选） | `curatedEdition` | 整节译本，界面标注「整节译文（上下文）」 |
+/// | 匹配到节但译本缺失 | `machineCanonical` | 新库标准原文（保留音标与原始顺序） |
 /// | 未匹配 | `machineAsr` | 实际 ASR 转写 |
 ///
 /// 其余硬性规则：
 ///
-/// - **半节只翻译确认范围**；整节译本若作为上下文展示，必须由界面标注为
-///   「整节译文（上下文）」，不能冒充该片段的精确译文；
+/// - **半节不得冒充精确译文**：半节取到的整节译本必须以
+///   `inputScope = fullVerseContext` 落库、由界面标注为「整节译文（上下文）」；
+///   只有在权威译本确实缺失时才退回机器翻译（`confirmedRange`，界面标注
+///   「仅已确认范围」）；
 /// - 缓存键包含 `输入哈希 + 语料版本 + 目标语言 + 提供方 + 引擎代号 + 预处理版本`，
 ///   引擎升级或语言包重新准备后主动失效；
 /// - 失败不丢记录：译文行写失败状态，任务保留可重试；
@@ -149,7 +152,12 @@ class TranslationCoordinator {
     required bool matched,
   }) async {
     final text = asrText.trim();
-    if (matches.isEmpty || !matched) {
+    // 判据是「有没有匹配到节」，而不是「记录是否已达 confirmed」。
+    //
+    // 曾经用 `!matched` 一并拦在这里，于是 `candidate` 状态（有明确候选、只是
+    // 可信度未达确认门槛）也走机器翻译。真机 11 条记录里 10 条落入机翻分支，
+    // 译文退化成乱码。
+    if (matches.isEmpty) {
       // 未匹配：翻译实际 ASR 转写，原文与匹配指标留空。
       return TranslationInput(
         kind: TranslationInputKind.asr,
@@ -159,34 +167,32 @@ class TranslationCoordinator {
       );
     }
 
-    // 已匹配：优先查授权校订译本（整节粒度）。
+    // 已匹配：优先查授权校订译本。
+    //
+    // 半节/候选同样走这条路。旧规则是「半节一律机器翻译，以免整节译本冒充精确
+    // 译文」，但实测 ML Kit 对带音标的古兰经阿拉伯语几乎无效（真机输出
+    // `As ٱلقلوب ٱلقلوب ٱلقلوب…` 这种重复词乱码，`status` 却仍是 done），
+    // 而连续诵读下片段边界几乎不落在节边界，于是「整节 + confirmed」是少数情况，
+    // 权威译本实际被整体绕过。授权译本即便只作为上下文，也远好于乱码。
+    // 用 `fullVerseContext` 明确标记这种「整节译本用于半节片段」，由界面标注，
+    // 不冒充精确译文。
     final ordered = <MatchedVerse>[...matches]..sort((a, b) => a.ordinal.compareTo(b.ordinal));
-    if (ordered.every((match) => match.isWholeVerse)) {
-      final curated = await _lookupCurated(ordered, language);
-      if (curated != null) {
-        return TranslationInput(
-          kind: TranslationInputKind.canonical,
-          sourceKind: TranslationSourceKind.curatedEdition,
-          text: curated.text,
-          inputScope: 'fullVerses',
-          curated: curated,
-        );
-      }
+    final wholeVerses = ordered.every((match) => match.isWholeVerse);
+    final curated = await _lookupCurated(ordered, language);
+    if (curated != null) {
       return TranslationInput(
         kind: TranslationInputKind.canonical,
-        sourceKind: TranslationSourceKind.machineCanonical,
-        text: _canonicalText(ordered),
-        inputScope: 'fullVerses',
+        sourceKind: TranslationSourceKind.curatedEdition,
+        text: curated.text,
+        inputScope: wholeVerses ? 'fullVerses' : 'fullVerseContext',
+        curated: curated,
       );
     }
-
-    // 半节/混合范围：只翻译经过确认的范围，不用整节内容补齐。
-    final hasPartial = ordered.any((match) => !match.isWholeVerse);
     return TranslationInput(
       kind: TranslationInputKind.canonical,
       sourceKind: TranslationSourceKind.machineCanonical,
       text: _canonicalText(ordered),
-      inputScope: hasPartial ? 'confirmedRange' : 'fullVerses',
+      inputScope: wholeVerses ? 'fullVerses' : 'confirmedRange',
     );
   }
 
@@ -478,8 +484,8 @@ class TranslationCoordinator {
     final editionId = editions.editionIdFor(language);
     if (editionId == null) return null;
     final available = editions.availableVerseKeys(language);
-    // 要求**每一节**都能查到：半个片段用译本、半个片段用机器翻译会让来源标记
-    // 含混不清，宁可整体回退机器翻译。
+    // 要求**每一节**都能查到：一个片段里一半用译本、一半用机器翻译会让来源标记
+    // 含混不清，这种情况下整体回退机器翻译（调用方会据此标 confirmedRange）。
     final parts = <String>[];
     String? publisher;
     String? version;

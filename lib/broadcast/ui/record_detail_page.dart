@@ -226,8 +226,12 @@ class _RecordDetailPageState extends State<RecordDetailPage> {
     return TextSectionCard(
       title: '目标译文',
       subtitle: '${record.targetLanguage.displayName} · ${translation.status.label}'
-          '${translation.inputScope == 'confirmedRange' ? ' · 仅已确认范围' : ''}'
-          '${translation.inputScope == 'asr' ? ' · 输入为识别转写' : ''}',
+          '${switch (translation.inputScope) {
+            'confirmedRange' => ' · 仅已确认范围',
+            'fullVerseContext' => ' · 整节译文（上下文）',
+            'asr' => ' · 输入为识别转写',
+            _ => '',
+          }}',
       body: translation.status == TranslationStatus.done ? translation.text : '',
       badge: translation.sourceKind.label,
       badgeColor: translation.sourceKind == TranslationSourceKind.curatedEdition

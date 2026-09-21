@@ -397,7 +397,12 @@ class _BroadcastHomePageState extends State<BroadcastHomePage> {
     return TextSectionCard(
       title: '目标译文',
       subtitle: '${language.displayName} · ${translation.status.label}'
-          '${translation.inputScope == 'confirmedRange' ? ' · 仅已确认范围' : ''}',
+          '${switch (translation.inputScope) {
+            'confirmedRange' => ' · 仅已确认范围',
+            'fullVerseContext' => ' · 整节译文（上下文）',
+            'asr' => ' · 输入为识别转写',
+            _ => '',
+          }}',
       body: translation.status == TranslationStatus.done ? translation.text : '',
       badge: translation.sourceKind.label,
       badgeColor: translation.sourceKind == TranslationSourceKind.curatedEdition

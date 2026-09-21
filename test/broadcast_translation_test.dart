@@ -198,8 +198,9 @@ void main() {
       expect(translation.sourceKind, TranslationSourceKind.machineCanonical);
     });
 
-    test('半节只翻译确认范围，范围标记为 confirmedRange', () async {
+    test('半节无译本时才机翻确认范围，范围标记为 confirmedRange', () async {
       final engine = _FakeEngine();
+      // 不提供授权译本：这是唯一该走机器翻译的半节场景。
       final coordinator = coordinatorWith(engine);
       final record = await saveRecord(
         matches: <MatchedVerse>[verse(112, 1, wordStart: 4, wordEnd: 6)],
@@ -219,6 +220,55 @@ void main() {
       expect(request.inputText, isNot(library.verse(112, 1)!.textUthmani));
       final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.inputScope, 'confirmedRange');
+    });
+
+    test('半节有授权译本时取整节译本，标记 fullVerseContext 而非冒充精确译文', () async {
+      final engine = _FakeEngine();
+      final editions = _FakeEditions(
+        edition: 'test-zh',
+        entries: <String, String>{'chinese:112:1': '说：他是真主，是独一的主'},
+      );
+      final coordinator = coordinatorWith(engine, editions: editions);
+      final record = await saveRecord(
+        matches: <MatchedVerse>[verse(112, 1, wordStart: 4, wordEnd: 6)],
+        scope: RecordScope.partialVerse,
+        status: MatchStatus.partial,
+      );
+      final status = await coordinator.runJob((await records.pendingJobs()).single);
+      expect(status, TranslationStatus.done);
+
+      // 关键：有权威译本时不得落到机器翻译。
+      // 实机上这里曾退化成 ML Kit 对古兰经阿拉伯语的输出（重复词乱码），
+      // 而 status 仍是 done，用户看到的是一段看似成功的垃圾。
+      expect(engine.requests, isEmpty, reason: '有授权译本时不得调用机器翻译');
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      expect(translation.sourceKind, TranslationSourceKind.curatedEdition);
+      expect(
+        translation.inputScope,
+        'fullVerseContext',
+        reason: '半节取整节译本必须标记为上下文，不得冒充该片段的精确译文',
+      );
+      expect(translation.text, '说：他是真主，是独一的主');
+    });
+
+    test('候选状态（有候选但未确认）也优先走权威译本', () async {
+      final engine = _FakeEngine();
+      final editions = _FakeEditions(
+        edition: 'test-zh',
+        entries: <String, String>{'chinese:112:1': '说：他是真主，是独一的主'},
+      );
+      final coordinator = coordinatorWith(engine, editions: editions);
+      final record = await saveRecord(
+        matches: <MatchedVerse>[verse(112, 1)],
+        status: MatchStatus.candidate,
+      );
+      await coordinator.runJob((await records.pendingJobs()).single);
+
+      // candidate 的 isMatched 为 false，旧逻辑据此走 machineAsr；实机 11 条记录里
+      // 有候选的却全部落到机器翻译。判据改为「有没有匹配到节」。
+      expect(engine.requests, isEmpty, reason: '有候选节时不得调用机器翻译');
+      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      expect(translation.sourceKind, TranslationSourceKind.curatedEdition);
     });
 
     test('有授权校订译本时直接查表，不经过机器翻译', () async {
