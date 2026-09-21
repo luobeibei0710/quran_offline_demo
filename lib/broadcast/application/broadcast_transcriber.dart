@@ -63,12 +63,22 @@ class BroadcastFragment {
   /// @param timedWords 带绝对时间的词
   /// @param segments 逐段推理结果（含声学证据）
   /// @param sampleRate 采样率
+  /// @param matchEvidence 用于匹配的整段原生证据；无音频时为 null
   const BroadcastFragment({
     required this.words,
     required this.timedWords,
     required this.segments,
     required this.sampleRate,
+    this.matchEvidence,
   });
+
+  /// 用于**匹配**的声学证据：整段音频的原生前向结果。
+  ///
+  /// 与 [segments] 的分工 —— 分段是为 ASR 准确（短段解码更稳），匹配却需要长上下文。
+  /// CTC 可行性要求「候选 token 数 × 2 + 1 ≤ 帧数」，分段后的证据帧数只够短候选：
+  /// 实测 30 秒片段被切成 3–10 秒的子窗后，49 token 的正确跨度被判不可行而跳过，
+  /// champion 退化成 2 token 的碎片（表现为「转写覆盖 6 节，却只匹配到 2 节」）。
+  final AcousticEvidence? matchEvidence;
 
   /// 实际 ASR 词。
   final List<String> words;
@@ -163,6 +173,7 @@ class BroadcastTranscriber {
         timedWords: const <TimedWord>[],
         segments: const <BroadcastSegment>[],
         sampleRate: sampleRate,
+        matchEvidence: null,
       );
     }
     final bounds = _segmenter.audioSegmentBounds(samples);
@@ -194,11 +205,17 @@ class BroadcastTranscriber {
       );
       onProgress?.call(bound.$2 / samples.length);
     }
+    // 匹配用的证据：只有一段时直接复用，多段时对整段音频再跑一次前向。
+    // 这次推理不服务转写（转写已由分段完成），只为给匹配提供足够的帧数。
+    final AcousticEvidence? matchEvidence = segments.isEmpty
+        ? null
+        : (segments.length == 1 ? segments.first.evidence : await runner.run(samples));
     return BroadcastFragment(
       words: List<String>.unmodifiable(transcript.words),
       timedWords: List<TimedWord>.unmodifiable(transcript.timedWords),
       segments: List<BroadcastSegment>.unmodifiable(segments),
       sampleRate: sampleRate,
+      matchEvidence: matchEvidence,
     );
   }
 }

@@ -60,9 +60,13 @@ class BroadcastMatchConfig {
   /// @param minFallbackPrecision 候选回退所需的最低解释比例（防止极短节误回退）
   /// @param runnerUpLimit 参与上层裁决的候选数上限（含多节跨度候选）
   /// @param recallLengthFitWeight 召回打分里「长度匹配度」的权重，用于抑制极短节
+  /// @param recallBalance 召回打分里「候选被覆盖比例」的权重
   const BroadcastMatchConfig({
-    this.topK = 64,
-    this.maxSpan = 4,
+    this.topK = 32,
+    // 8 而不是 4：全经里有大量极短节（开端章 2–9 词/节、سورة الكوثر 等），
+    // 30 秒片段可跨 5–6 节。取 4 时匹配范围会明显窄于转写内容（实测开端章
+    // 转写覆盖 6 节、只匹配到 4 节，解释比例被压到 0.6 以下）。
+    this.maxSpan = 8,
     this.spanPenalty = 0.1,
     this.minPrecision = 0.6,
     this.minCoverage = 0.5,
@@ -74,8 +78,10 @@ class BroadcastMatchConfig {
     this.minFallbackCoverage = 0.4,
     this.minFallbackTextScore = 0.35,
     this.minFallbackPrecision = 0.3,
-    this.runnerUpLimit = 96,
-    this.recallLengthFitWeight = 0.25,
+    this.runnerUpLimit = 1024,
+    this.candidateShortlist = 192,
+    this.recallLengthFitWeight = 0,
+    this.recallBalance = 0.5,
   });
 
   /// 参与精排的候选数。
@@ -124,10 +130,26 @@ class BroadcastMatchConfig {
 
   /// 参与上层裁决的候选数上限。
   ///
-  /// 取 96（全经规模）而不是 matcher 默认的 12：短节因为按帧归一化的分数更优会占满
-  /// 排名靠前的位置，导致多节跨度候选进不了裁决池。真机实测「转写 25 词被匹配成
-  /// 7 词单节（F1 0.438）」即由此产生。
+  /// 取 1024（即全部候选）而不是 matcher 默认的 12：预选按 CTC 排序分截断时，
+  /// **多节跨度候选会因按帧归一化的分数天然偏低而被整体排除**（实测开端章正确的
+  /// 6 节跨度候选排在第 300 名开外），裁决阶段根本看不到它们。既然候选总数只有
+  /// topK×maxSpan（64×8=512），不截断即可，代价是裁决阶段多做几百次词级对齐
+  /// （实测匹配耗时 200–500 ms，可接受）。
   final int runnerUpLimit;
+
+  /// 召回打分里「候选被覆盖比例」的权重。
+  ///
+  /// 取 0.5：单看「转写被候选覆盖的比例」时，跨多节的转写会让每个正确单节最多
+  /// 只贡献 1/N 的分，正确节与「恰好含常见词的无关节」无法区分；补上「候选被转写
+  /// 覆盖的比例」后，只有真正被念到的节才会浮上来。
+  final double recallBalance;
+
+  /// 裁决阶段最多做多少次词级对齐。
+  ///
+  /// 候选总数是 topK×maxSpan（64×8=512），逐一对齐会让匹配耗时升到 1.5 秒以上。
+  /// 由于候选已按「词数接近度」排序（见 [QuranMatchService.match]），
+  /// 只取前 192 个即可覆盖所有可能解释整段转写的候选。
+  final int candidateShortlist;
 
   /// 召回打分里「长度匹配度」的权重。
   ///
@@ -234,7 +256,11 @@ class QuranMatchService {
   /// @param library 独立三章语料库
   /// @param config 判定参数
   QuranMatchService({required this.library, this.config = const BroadcastMatchConfig()})
-    : _matcher = QuranMatcher(library, lengthFitWeight: config.recallLengthFitWeight);
+    : _matcher = QuranMatcher(
+        library,
+        lengthFitWeight: config.recallLengthFitWeight,
+        recallBalance: config.recallBalance,
+      );
 
   /// 语料库。
   final BroadcastQuranLibrary library;
@@ -246,6 +272,18 @@ class QuranMatchService {
 
   /// 归一化口径版本（写入指标元数据）。
   static const String normalizationVersion = 'quran-text-normalize-1';
+
+  /// 候选跨度的参考词数（用于「词数接近度」排序）。
+  ///
+  /// @param candidate 候选
+  /// @return 该跨度覆盖的经文词数
+  int _referenceWordCount(VerseMatchCandidate candidate) {
+    var total = 0;
+    for (var ayah = candidate.ayahStart; ayah <= candidate.ayahEnd; ayah++) {
+      total += library.wordsOf(candidate.surah, ayah).length;
+    }
+    return total;
+  }
 
   /// 对一段已转写的片段做匹配。
   ///
@@ -262,32 +300,46 @@ class QuranMatchService {
       return _reject(asrText, '仅识别到章首太斯米，证据不足');
     }
 
-    // 逐段精排：长片段会切成多个子窗，必须按子窗匹配后合并，不能把某个窗的
-    // logprobs 拿去给整段文本打分。取所有子窗里排序分最优者作为主候选集。
-    VerseMatchResult? bestResult;
-    for (final segment in fragment.segments) {
-      if (segment.decoded.text.trim().isEmpty) continue;
-      final result = _matcher.match(
-        segment.evidence,
-        segment.decoded.text,
-        topK: config.topK,
-        maxSpan: config.maxSpan,
-        spanPenalty: config.spanPenalty,
-        // 放大次优候选数量：否则长跨度候选进不了下面的裁决池。
-        runnerUpLimit: config.runnerUpLimit,
-      );
-      if (result.champion == null) continue;
-      final current = bestResult?.champion;
-      if (current == null || result.champion!.sortScore < current.sortScore) {
-        bestResult = result;
-      }
-    }
-    if (bestResult?.champion == null) return _reject(asrText, '新库 41 节内没有候选');
+    // 用**整段**音频的原生证据做一次匹配。
+    //
+    // 不能按子窗匹配再合并：CTC 可行性要求「候选 token 数 × 2 + 1 ≤ 帧数」，
+    // 分段后的子窗（实测 3–10 秒）只够短候选 —— 49 token 的正确跨节候选会被判
+    // 不可行直接跳过，只剩 2 token 的碎片能参与裁决（表现为「转写覆盖 6 节、
+    // 却只匹配到 2 节」）。整段证据（30 秒）帧数充足，跨节候选才是可评估的。
+    final evidence = fragment.matchEvidence;
+    if (evidence == null) return _reject(asrText, '缺少可用于匹配的声学证据');
+    final result = _matcher.match(
+      evidence,
+      asrText,
+      topK: config.topK,
+      maxSpan: config.maxSpan,
+      spanPenalty: config.spanPenalty,
+      runnerUpLimit: config.runnerUpLimit,
+    );
+    if (result.champion == null) return _reject(asrText, '全经语料内没有候选');
 
-    final champion = bestResult!.champion!;
+    // 裁决前的候选筛选：按「参考词数与被转写词数的接近程度」优先。
+    //
+    // 不能直接按 CTC 排序分取前 N —— 按帧归一化的分数系统性偏好极短候选
+    // （实测 champion 是 2 token 的碎片，正确的 49 token 跨度排在第 130 名之后）。
+    // 用词数接近度排序后，真正可能解释整段转写的候选会浮到前面，因此可以安全地
+    // 只对前 [BroadcastMatchConfig.candidateShortlist] 个做词级对齐，
+    // 把裁决成本压回可用范围。
+    final champion = result.champion!;
+    final raw = <VerseMatchCandidate>[champion, ...result.runnersUp];
+    raw.sort((a, b) {
+      final distanceA = (_referenceWordCount(a) - asrWords.length).abs();
+      final distanceB = (_referenceWordCount(b) - asrWords.length).abs();
+      if (distanceA != distanceB) return distanceA.compareTo(distanceB);
+      return a.sortScore.compareTo(b.sortScore);
+    });
+    final shortlist = raw.length > config.candidateShortlist
+        ? raw.sublist(0, config.candidateShortlist)
+        : raw;
+    // champion 始终参与裁决，避免筛选把唯一可用的声学最优解排除掉。
+    if (!shortlist.contains(champion)) shortlist.add(champion);
     final candidates = <_Candidate>[
-      for (final candidate in <VerseMatchCandidate>[champion, ...bestResult.runnersUp])
-        _evaluate(candidate, asrWords),
+      for (final candidate in shortlist) _evaluate(candidate, asrWords),
     ];
     final viable = <_Candidate>[
       for (final candidate in candidates)

@@ -118,7 +118,12 @@ class QuranMatcher {
   ///
   /// @param verseIndex 经文索引（旧库或广播新库），只使用其经文与 token 数据
   /// @param lengthFitWeight 召回打分中「长度匹配度」的权重，默认 0（保持旧库语义）
-  QuranMatcher(this.verseIndex, {this.lengthFitWeight = 0}) {
+  /// @param recallBalance 召回打分中「候选被覆盖比例」的权重，默认 0（保持旧库语义）
+  QuranMatcher(
+    this.verseIndex, {
+    this.lengthFitWeight = 0,
+    this.recallBalance = 0,
+  }) {
     for (var i = 0; i < verseIndex.verses.length; i++) {
       final words = verseIndex.verses[i].words;
       if (words.isEmpty) continue;
@@ -143,6 +148,17 @@ class QuranMatcher {
   /// 打开后打分变为 `覆盖率×(0.85−w) + 编辑相似度×0.15 + 长度匹配度×w`，
   /// 其中长度匹配度 = min(转写词数, 候选词数) / max(两者)。
   final double lengthFitWeight;
+
+  /// 召回打分中「候选被覆盖比例」的权重。
+  ///
+  /// 默认 0：只按「转写被候选覆盖的比例」打分（分母是转写词数）。这个口径在
+  /// 转写跨多节时会失效 —— 实测开端章 30 秒片段跨 6 节，每个**正确的**单节最多
+  /// 只能贡献 1/6 的分，与全经里任何含常见词的节无法区分，正确节因此被挤出 topK，
+  /// 以它为起点的跨度候选根本生成不出来（表现为「转写覆盖 6 节，却只匹配到 2 节」）。
+  ///
+  /// 大于 0 时改为两个口径的加权：`(1-b)×转写覆盖率 + b×该节被覆盖比例`，
+  /// 即同时要求「转写大多能落到该节」与「该节大多被转写覆盖」。
+  final double recallBalance;
 
   /// 词 -> 经文下标倒排索引（**全文**分词，不只用首词）。
   ///
@@ -285,11 +301,17 @@ class QuranMatcher {
     for (final word in words) {
       if (verseWords.contains(word)) matched++;
     }
-    final coverage = matched / words.length;
-    if (coverage == 0.0) return 0.0;
+    final transcriptCoverage = matched / words.length;
+    if (transcriptCoverage == 0.0) return 0.0;
+    final verseWordCount = verseWords.length;
+    var coverage = transcriptCoverage;
+    if (recallBalance > 0 && verseWordCount > 0) {
+      // 同时要求「转写大多能落到该节」与「该节大多被转写覆盖」。
+      coverage =
+          (1 - recallBalance) * transcriptCoverage + recallBalance * (matched / verseWordCount);
+    }
     final edit = QuranText.textScore(decoded, this.verseIndex.verses[verseIndex].normalizedText);
     if (lengthFitWeight <= 0) return coverage * 0.85 + edit * 0.15;
-    final verseWordCount = verseWords.length;
     final longer = math.max(decodedWordCount, verseWordCount);
     final lengthFit = longer == 0 ? 0.0 : math.min(decodedWordCount, verseWordCount) / longer;
     // 只惩罚「明显过短」的候选。若按 lengthFit 全额加权，正确的中等长度节也会因

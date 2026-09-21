@@ -196,7 +196,9 @@ void main() {
       expect(singles, hasLength(6236));
       for (final key in tokens.keys) {
         final parts = key.split(':').map(int.parse).toList();
-        expect(parts[2] - parts[1], inInclusiveRange(0, 3));
+        // maxSpan=8：全经里有大量极短节（开端章 2–9 词/节），30 秒片段可跨 5–6 节，
+        // 上限取 4 会让匹配范围明显窄于转写内容。
+        expect(parts[2] - parts[1], inInclusiveRange(0, 7));
       }
     });
   });
