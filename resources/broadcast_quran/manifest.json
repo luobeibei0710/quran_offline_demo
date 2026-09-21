@@ -17,37 +17,110 @@
     "licenseUrl": "https://tanzil.net/docs/Text_License",
     "preservedNotice": true
   },
-  "audio": [
-    {
-      "path": "audio_candidates/067-alafasy-mp3quran.mp3",
-      "sourceUrl": "https://server8.mp3quran.net/afs/067.mp3",
-      "bytes": 7293947,
-      "sha256": "ded3b53cfc22c3544170f222068472174e200f5958b35561d298bb4db7e54f11",
-      "durationSeconds": 455.444878,
-      "surah": 67,
+  "appIntegrated": false,
+  "audio": {
+    "retrievedAt": "2026-09-21T16:00:00Z",
+    "source": {
+      "urlTemplate": "https://server8.mp3quran.net/afs/{surah:03d}.mp3",
+      "provider": "MP3Quran (server8)",
       "reciter": "Mishary Rashid Alafasy",
-      "sampleRate": 44100,
-      "channels": 2,
-      "fullDecodePassed": true,
-      "listened": false,
-      "contentAlignmentVerified": false,
-      "redistributionRights": "pending"
+      "format": "MP3 128 kbps",
+      "scope": "whole Quran, 114 chapters, one file per chapter",
+      "licenseNote": "诵读音频版权归诵读者/发行方；本仓库仅作离线验证素材，不入 App 安装包。"
     },
-    {
-      "path": "audio_candidates/067-alafasy-ru.mp3",
-      "sourceUrl": "https://cdn.alislam.ru/quran/audio-surah/128/ar.alafasy/67.mp3",
-      "bytes": 7882825,
-      "sha256": "1f3c989413ec76dfa15952873be01b3467ed0069205132ca4ae925d200bc5f63",
-      "durationSeconds": 455.426756,
-      "surah": 67,
-      "reciter": "Mishary Rashid Alafasy",
-      "sampleRate": 44100,
-      "channels": 2,
-      "fullDecodePassed": true,
-      "listened": false,
-      "contentAlignmentVerified": false,
-      "redistributionRights": "pending"
-    }
-  ],
-  "appIntegrated": false
+    "status": {
+      "downloadedChapters": 17,
+      "expectedChapters": 114,
+      "downloadedBytes": 630528522,
+      "complete": false,
+      "note": "下载进行中；完成后重新生成本清单（含逐文件 sha256）。"
+    },
+    "chapters": [
+      {
+        "surah": 1,
+        "path": "full_recitation/001.mp3",
+        "bytes": 837734
+      },
+      {
+        "surah": 2,
+        "path": "full_recitation/002.mp3",
+        "bytes": 92585984
+      },
+      {
+        "surah": 3,
+        "path": "full_recitation/003.mp3",
+        "bytes": 74404818
+      },
+      {
+        "surah": 4,
+        "path": "full_recitation/004.mp3",
+        "bytes": 76576952
+      },
+      {
+        "surah": 5,
+        "path": "full_recitation/005.mp3",
+        "bytes": 60279889
+      },
+      {
+        "surah": 6,
+        "path": "full_recitation/006.mp3",
+        "bytes": 69373425
+      },
+      {
+        "surah": 7,
+        "path": "full_recitation/007.mp3",
+        "bytes": 79569122
+      },
+      {
+        "surah": 8,
+        "path": "full_recitation/008.mp3",
+        "bytes": 29181216
+      },
+      {
+        "surah": 9,
+        "path": "full_recitation/009.mp3",
+        "bytes": 32198656
+      },
+      {
+        "surah": 10,
+        "path": "full_recitation/010.mp3",
+        "bytes": 25407488
+      },
+      {
+        "surah": 11,
+        "path": "full_recitation/011.mp3",
+        "bytes": 24293376
+      },
+      {
+        "surah": 12,
+        "path": "full_recitation/012.mp3",
+        "bytes": 17727488
+      },
+      {
+        "surah": 13,
+        "path": "full_recitation/013.mp3",
+        "bytes": 12607488
+      },
+      {
+        "surah": 36,
+        "path": "full_recitation/036.mp3",
+        "bytes": 16963851
+      },
+      {
+        "surah": 55,
+        "path": "full_recitation/055.mp3",
+        "bytes": 10872933
+      },
+      {
+        "surah": 67,
+        "path": "full_recitation/067.mp3",
+        "bytes": 7293947
+      },
+      {
+        "surah": 112,
+        "path": "full_recitation/112.mp3",
+        "bytes": 354155
+      }
+    ]
+  }
 }
