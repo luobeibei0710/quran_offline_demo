@@ -19,107 +19,706 @@
   },
   "appIntegrated": false,
   "audio": {
-    "retrievedAt": "2026-09-21T16:00:00Z",
+    "retrievedAt": "2026-09-21T08:35:00Z",
     "source": {
       "urlTemplate": "https://server8.mp3quran.net/afs/{surah:03d}.mp3",
       "provider": "MP3Quran (server8)",
       "reciter": "Mishary Rashid Alafasy",
-      "format": "MP3 128 kbps",
+      "format": "MP3, 128 kbps, 44.1 kHz stereo",
       "scope": "whole Quran, 114 chapters, one file per chapter",
-      "licenseNote": "诵读音频版权归诵读者/发行方；本仓库仅作离线验证素材，不入 App 安装包。"
+      "licenseNote": "诵读音频版权归诵读者/发行方所有；本仓库仅作离线验证素材，不入 App 安装包。"
     },
     "status": {
-      "downloadedChapters": 17,
+      "downloadedChapters": 114,
       "expectedChapters": 114,
-      "downloadedBytes": 630528522,
-      "complete": false,
-      "note": "下载进行中；完成后重新生成本清单（含逐文件 sha256）。"
+      "downloadedBytes": 1718021595,
+      "complete": true,
+      "decodeSpotCheck": "002/001/112/114/055 完整解码通过"
     },
     "chapters": [
       {
         "surah": 1,
         "path": "full_recitation/001.mp3",
-        "bytes": 837734
+        "bytes": 837734,
+        "sha256": "3ac2fd2b9313dee8c69c78ebbf71ac10e5bff9223b7829bff84a8f0ffc165ee1"
       },
       {
         "surah": 2,
         "path": "full_recitation/002.mp3",
-        "bytes": 92585984
+        "bytes": 120641555,
+        "sha256": "9b4930143a1389aab4782fd7f8f510887416806e66323cb6e9c15843a88d116a"
       },
       {
         "surah": 3,
         "path": "full_recitation/003.mp3",
-        "bytes": 74404818
+        "bytes": 74404818,
+        "sha256": "53303b6029cc127b709fa076ff7e886640d0b89e2a46143aceb432b5b0b4c887"
       },
       {
         "surah": 4,
         "path": "full_recitation/004.mp3",
-        "bytes": 76576952
+        "bytes": 76576952,
+        "sha256": "577bf28f23e1bf1b9a662c42642e87c972256fce8133ff3c9adccce287e1f4bb"
       },
       {
         "surah": 5,
         "path": "full_recitation/005.mp3",
-        "bytes": 60279889
+        "bytes": 60279889,
+        "sha256": "3cc6ead8b888517f0c5b22faaf19c336244af03f6a8946df279638ec4290280c"
       },
       {
         "surah": 6,
         "path": "full_recitation/006.mp3",
-        "bytes": 69373425
+        "bytes": 69373425,
+        "sha256": "d4cfae0360ab360d3eebfcd28775fb491a19259449288d25ed07a7890de14f5a"
       },
       {
         "surah": 7,
         "path": "full_recitation/007.mp3",
-        "bytes": 79569122
+        "bytes": 79569122,
+        "sha256": "a1cd93b2506af457ae9b5b5ffec544d6a8480e5e3be6ecc8ab34c94904284b1f"
       },
       {
         "surah": 8,
         "path": "full_recitation/008.mp3",
-        "bytes": 29181216
+        "bytes": 29181216,
+        "sha256": "5f5c1642fb352c6ee1e9686b6cecac88660937ec40b0aff381bc6226e6347cf4"
       },
       {
         "surah": 9,
         "path": "full_recitation/009.mp3",
-        "bytes": 32198656
+        "bytes": 58000339,
+        "sha256": "b21cb764f5cf2fff7b8f51979800960ca9451f6947dcb1d771e4136745909337"
       },
       {
         "surah": 10,
         "path": "full_recitation/010.mp3",
-        "bytes": 25407488
+        "bytes": 43054115,
+        "sha256": "9b9ed248f597a9bb8c5cd2cb2326b293bfac5f0bba5e88617f53933224cad35d"
       },
       {
         "surah": 11,
         "path": "full_recitation/011.mp3",
-        "bytes": 24293376
+        "bytes": 44350623,
+        "sha256": "0f7db30c011118d27ec85bf1127e1e4f7780f027d0f853ba4b1fc92cc8dfc8b9"
       },
       {
         "surah": 12,
         "path": "full_recitation/012.mp3",
-        "bytes": 17727488
+        "bytes": 40406761,
+        "sha256": "39e46d11d48bc9753dfec1c852f9b885ab1b963060b0039add71702e78b104b3"
       },
       {
         "surah": 13,
         "path": "full_recitation/013.mp3",
-        "bytes": 12607488
+        "bytes": 19471188,
+        "sha256": "e3a761ab3db702e4c9a23e56126a36807df8d6802344c56a903959aed91a2215"
+      },
+      {
+        "surah": 14,
+        "path": "full_recitation/014.mp3",
+        "bytes": 19643805,
+        "sha256": "0499ac60f4925648b6bf9b4da48401633a546cdb8021e63a297e3d4dec325688"
+      },
+      {
+        "surah": 15,
+        "path": "full_recitation/015.mp3",
+        "bytes": 15282819,
+        "sha256": "e54f397e9fef69917091f52c7a1cc1aa0eb2740e2e91eb13545a6ba8b46c14aa"
+      },
+      {
+        "surah": 16,
+        "path": "full_recitation/016.mp3",
+        "bytes": 40468621,
+        "sha256": "44f3b298ae53151208e9153e3b49d3d3d179cd28fa275bb5574d8e07d2cce5b7"
+      },
+      {
+        "surah": 17,
+        "path": "full_recitation/017.mp3",
+        "bytes": 33825578,
+        "sha256": "98982dad4308b07524cb9eedb992dfc74d9761299d805e17fede55317c00cd3c"
+      },
+      {
+        "surah": 18,
+        "path": "full_recitation/018.mp3",
+        "bytes": 31938492,
+        "sha256": "3596cf2faaf62b42ff11d9ee79621f35bf3c0ddb116981c046407bfea56ba2d5"
+      },
+      {
+        "surah": 19,
+        "path": "full_recitation/019.mp3",
+        "bytes": 20530713,
+        "sha256": "94e76540c0766a2357bdaf0b467815a770843bf5b0ba76dc286efbb3285c80e0"
+      },
+      {
+        "surah": 20,
+        "path": "full_recitation/020.mp3",
+        "bytes": 26050700,
+        "sha256": "896fa8b8da5dd27d308e4c3e72a9aaed5a3c44fa4e99dae5e46a198519e9d2c6"
+      },
+      {
+        "surah": 21,
+        "path": "full_recitation/021.mp3",
+        "bytes": 25129522,
+        "sha256": "3b851c45d40f442e0a795d25a9c33b68ac22fb1b5972ed8f802f34ce24579f7c"
+      },
+      {
+        "surah": 22,
+        "path": "full_recitation/022.mp3",
+        "bytes": 28365777,
+        "sha256": "a2bff5d5c81f0a69d20b35f125d143da39a2f176d909aba56d6418e8d83e20d8"
+      },
+      {
+        "surah": 23,
+        "path": "full_recitation/023.mp3",
+        "bytes": 23771156,
+        "sha256": "7cb60b80a42f01bb61c48f5ebfcc8a1d55fd513c5a6f3a39988a9ae251c88075"
+      },
+      {
+        "surah": 24,
+        "path": "full_recitation/024.mp3",
+        "bytes": 29455396,
+        "sha256": "fd4c19a38a16126880c626b5d859775f484719ef8c251da01e8d3bea89812ccc"
+      },
+      {
+        "surah": 25,
+        "path": "full_recitation/025.mp3",
+        "bytes": 17632169,
+        "sha256": "10a233df0e5aa1bdcf0aee1a1180e0fcf3128ae34d85d115cee4cfe4718ade5a"
+      },
+      {
+        "surah": 26,
+        "path": "full_recitation/026.mp3",
+        "bytes": 29327506,
+        "sha256": "7e06a092a0e08004bfe492099df431f243e85ff49c9ab08391915f00b906a70d"
+      },
+      {
+        "surah": 27,
+        "path": "full_recitation/027.mp3",
+        "bytes": 25160030,
+        "sha256": "63c2b572f7a9d41f50da6427e1b8386028488fca941e8cef1bdd6338bed3532f"
+      },
+      {
+        "surah": 28,
+        "path": "full_recitation/028.mp3",
+        "bytes": 30467277,
+        "sha256": "3dab11f64e611c9c226085e27ddf49f2c8041c60ad6ffc06ec5a877d910791a8"
+      },
+      {
+        "surah": 29,
+        "path": "full_recitation/029.mp3",
+        "bytes": 20338457,
+        "sha256": "37fb41e1f5b3909e8d0c34e0823ee0e5e00dbd7877b4a0b838bf5c66e9ca2010"
+      },
+      {
+        "surah": 30,
+        "path": "full_recitation/030.mp3",
+        "bytes": 18743522,
+        "sha256": "9dd4fb36dae815b9d33c37e24e3ba10799002d6102bb36c1ac2bb8b1d55a5129"
+      },
+      {
+        "surah": 31,
+        "path": "full_recitation/031.mp3",
+        "bytes": 11448042,
+        "sha256": "5d71aef78ec3c54c6d242a161ad56c80bc205ed3eea67c14307e8810bd5626b6"
+      },
+      {
+        "surah": 32,
+        "path": "full_recitation/032.mp3",
+        "bytes": 8390675,
+        "sha256": "69257acba1133caaea15974a3b09ca4c9a56ae774931b0e8b3388af605cc749b"
+      },
+      {
+        "surah": 33,
+        "path": "full_recitation/033.mp3",
+        "bytes": 27887216,
+        "sha256": "70c79c0efabbfc2658efa92d4af67f6a01131fe9db4acf6479a72efcce2e650b"
+      },
+      {
+        "surah": 34,
+        "path": "full_recitation/034.mp3",
+        "bytes": 18291705,
+        "sha256": "8fa3689f6fed9ecdca33c56b19801e419fd61906556d8ae37813b175c82f7a86"
+      },
+      {
+        "surah": 35,
+        "path": "full_recitation/035.mp3",
+        "bytes": 16916201,
+        "sha256": "650e5b001759b005162afc51be6e8bb4badd3b96dacba38589cecc9ded1d95bd"
       },
       {
         "surah": 36,
         "path": "full_recitation/036.mp3",
-        "bytes": 16963851
+        "bytes": 16963851,
+        "sha256": "6af71cd6e17b8b710e13d5974186b5afd9b76b363f0007287b2f1852781109e3"
+      },
+      {
+        "surah": 37,
+        "path": "full_recitation/037.mp3",
+        "bytes": 23199804,
+        "sha256": "319743225b9bb69930ac03941559fb7eeb7cc1ba1aa31f9937699a338f81177d"
+      },
+      {
+        "surah": 38,
+        "path": "full_recitation/038.mp3",
+        "bytes": 17121417,
+        "sha256": "0c51ffdd7ceaef44040929769cedaf548e5d7c29522269cc3405e11c17f03225"
+      },
+      {
+        "surah": 39,
+        "path": "full_recitation/039.mp3",
+        "bytes": 26082467,
+        "sha256": "eabce9dec62b9300e6deff884b144ef2e5d9363b12aecf361e9e1ba6d4ebc494"
+      },
+      {
+        "surah": 40,
+        "path": "full_recitation/040.mp3",
+        "bytes": 25088558,
+        "sha256": "8a1bad5031baa5b8a9babbba580bd6ab60cd2ccb7213b7652221303f8f0b2d72"
+      },
+      {
+        "surah": 41,
+        "path": "full_recitation/041.mp3",
+        "bytes": 18572994,
+        "sha256": "7b8924eadc3216cc15e10a4ff74349e5b0173e48fcec97940a851686ae98e474"
+      },
+      {
+        "surah": 42,
+        "path": "full_recitation/042.mp3",
+        "bytes": 18722625,
+        "sha256": "7710be543d74d347b3a84ace119c8256a5451ebde63cea30e6944d676c4918f6"
+      },
+      {
+        "surah": 43,
+        "path": "full_recitation/043.mp3",
+        "bytes": 19659690,
+        "sha256": "5bf833a34ec9d2ded1f070a83b2b797dd7897ac2ad643b4479d1adec2304f640"
+      },
+      {
+        "surah": 44,
+        "path": "full_recitation/044.mp3",
+        "bytes": 9232862,
+        "sha256": "1d68b876be517e0a6e3d0dd403be451f702e3e015ccfdabfbe9449c798203938"
+      },
+      {
+        "surah": 45,
+        "path": "full_recitation/045.mp3",
+        "bytes": 10396461,
+        "sha256": "7e029eec95dded70cbd3e0caa74180bfbf67d76db735a8af40714b8f711578dc"
+      },
+      {
+        "surah": 46,
+        "path": "full_recitation/046.mp3",
+        "bytes": 15325452,
+        "sha256": "e8fb36389690ccdd2dee93bd7beb90f7f2cea8969de2b84a9aa74f9051a6c4d5"
+      },
+      {
+        "surah": 47,
+        "path": "full_recitation/047.mp3",
+        "bytes": 11812505,
+        "sha256": "2db1d549f31ba78021fe65064f047ec00defb971b81d0425bd6b487ea12b8b68"
+      },
+      {
+        "surah": 48,
+        "path": "full_recitation/048.mp3",
+        "bytes": 11551697,
+        "sha256": "5d5d0c845ba8193e4876d0531050c489ca8c3cd2b76658a3fb74493769e2ced9"
+      },
+      {
+        "surah": 49,
+        "path": "full_recitation/049.mp3",
+        "bytes": 8023707,
+        "sha256": "49a147d8485d957703ac39c193dbf3ec50d1b6e6e5e3f462adae4fd0627e0581"
+      },
+      {
+        "surah": 50,
+        "path": "full_recitation/050.mp3",
+        "bytes": 8964526,
+        "sha256": "6d9730d629a3e8454070bc9d22d769f73e3ba12151fccee49a7bb42a4f81e421"
+      },
+      {
+        "surah": 51,
+        "path": "full_recitation/051.mp3",
+        "bytes": 8721281,
+        "sha256": "a3b0132b3b02ded4a0f9c7f9658b69d0defc1f7c76c25e5b8ce1fcca394420ad"
+      },
+      {
+        "surah": 52,
+        "path": "full_recitation/052.mp3",
+        "bytes": 7771673,
+        "sha256": "29eaaa08dc031a05ac0c53b7381cb632d0fea21005b83f5ccb848ca0e54052bc"
+      },
+      {
+        "surah": 53,
+        "path": "full_recitation/053.mp3",
+        "bytes": 7389660,
+        "sha256": "d30bbb0cecf331a39a66af54dfbf1319325710c8dcb883136981ed3363c0fded"
+      },
+      {
+        "surah": 54,
+        "path": "full_recitation/054.mp3",
+        "bytes": 7729461,
+        "sha256": "33f43fdf3ff0f66e6234f80da1069b95d29b61391da809d94a8a78d0cb4bc914"
       },
       {
         "surah": 55,
         "path": "full_recitation/055.mp3",
-        "bytes": 10872933
+        "bytes": 10872933,
+        "sha256": "710fca356339532f485f6d1ee36689282d1984fa872ce8318fb67b6fc2bdd152"
+      },
+      {
+        "surah": 56,
+        "path": "full_recitation/056.mp3",
+        "bytes": 11477721,
+        "sha256": "e65ad11b9367f1b11875f54d72f838855e7a2687fbb466c0e71e93ad54163b9e"
+      },
+      {
+        "surah": 57,
+        "path": "full_recitation/057.mp3",
+        "bytes": 12945592,
+        "sha256": "6b07e96967517bd98a19d20c0d766e0e264cf3f097634daab9011d9bb8d8c21e"
+      },
+      {
+        "surah": 58,
+        "path": "full_recitation/058.mp3",
+        "bytes": 9818843,
+        "sha256": "788e23a6301f12fca59d73decc176e713064469aca47c0c0e5bbc1c4d24725d1"
+      },
+      {
+        "surah": 59,
+        "path": "full_recitation/059.mp3",
+        "bytes": 10031163,
+        "sha256": "6c4d36e808a5c21efc49cb017695a45d4f1cff90564d722907e9efe0764fe9c0"
+      },
+      {
+        "surah": 60,
+        "path": "full_recitation/060.mp3",
+        "bytes": 7230423,
+        "sha256": "f8999eb039b4e0d9d711045415de1965d2f1bc8bf1f6a0e4bf69d3d7c152ffd1"
+      },
+      {
+        "surah": 61,
+        "path": "full_recitation/061.mp3",
+        "bytes": 4690061,
+        "sha256": "6d2cc6e9a47239d8174f1aa1484001796a8126c0e885b7f85760bfa025165391"
+      },
+      {
+        "surah": 62,
+        "path": "full_recitation/062.mp3",
+        "bytes": 3424902,
+        "sha256": "3ce907197808035a4872866e57715135bcea821eb5f5e945c83d273f174d0b34"
+      },
+      {
+        "surah": 63,
+        "path": "full_recitation/063.mp3",
+        "bytes": 4139196,
+        "sha256": "f30405aef9763e38b21bf1ac5ba521dbe14f66ac7f3475a08129a51c6a6e8d9f"
+      },
+      {
+        "surah": 64,
+        "path": "full_recitation/064.mp3",
+        "bytes": 5199557,
+        "sha256": "59c6331cedc813d81998affed808a8acdd3e7902cdbe42df1eb2e4b6951cc66d"
+      },
+      {
+        "surah": 65,
+        "path": "full_recitation/065.mp3",
+        "bytes": 5785115,
+        "sha256": "122934109e307e7c171d4e3770dda2ee388a6792315fc59137107d5eb2934d1d"
+      },
+      {
+        "surah": 66,
+        "path": "full_recitation/066.mp3",
+        "bytes": 5728692,
+        "sha256": "437c40e47b601cfdd313e835aa8aa923de8e6e8d91bb9b1793fb82a7f1bfccb6"
       },
       {
         "surah": 67,
         "path": "full_recitation/067.mp3",
-        "bytes": 7293947
+        "bytes": 7293947,
+        "sha256": "ded3b53cfc22c3544170f222068472174e200f5958b35561d298bb4db7e54f11"
+      },
+      {
+        "surah": 68,
+        "path": "full_recitation/068.mp3",
+        "bytes": 7304397,
+        "sha256": "42f2344404ca5a276750c62e262267c1134f1e6318ee3319485d79780ed0b573"
+      },
+      {
+        "surah": 69,
+        "path": "full_recitation/069.mp3",
+        "bytes": 6501498,
+        "sha256": "7dfca8ae02059482af1847bff8e37d696499aa89c5f2bb9f7b3aa698a00e334a"
+      },
+      {
+        "surah": 70,
+        "path": "full_recitation/070.mp3",
+        "bytes": 5093813,
+        "sha256": "663c600c8c884cfc202dde4a1a8244f3570dfeb603e3d4d6f323ac2de44c5f32"
+      },
+      {
+        "surah": 71,
+        "path": "full_recitation/071.mp3",
+        "bytes": 4501977,
+        "sha256": "ed97c3bf20488eaf3853c20eb75f6a3fdd37bfae8de83d4fd28e874c05436c48"
+      },
+      {
+        "surah": 72,
+        "path": "full_recitation/072.mp3",
+        "bytes": 5365483,
+        "sha256": "aa50a8c397784a1a204399903c516c165159aa0f992adba306b64c5ccaddc722"
+      },
+      {
+        "surah": 73,
+        "path": "full_recitation/073.mp3",
+        "bytes": 3912244,
+        "sha256": "202569d639bb5668f8ea22bd4fb082c871bb62f0ff1fc07f4b430b962abbc6df"
+      },
+      {
+        "surah": 74,
+        "path": "full_recitation/074.mp3",
+        "bytes": 5197471,
+        "sha256": "63aabd9f744d8c31e725b494b47703a7827a4ed842f677dd865a9afe47819653"
+      },
+      {
+        "surah": 75,
+        "path": "full_recitation/075.mp3",
+        "bytes": 3394391,
+        "sha256": "eca8cef4b5a0802e3dba47c723e9cc1ea44979d7d054c9867618e60c6a85ae98"
+      },
+      {
+        "surah": 76,
+        "path": "full_recitation/076.mp3",
+        "bytes": 5046999,
+        "sha256": "f1fb5b2b6e3c8e9729bbbcde1f0cb7e1b7c288c0425b344203f6c0d3c3794ac1"
+      },
+      {
+        "surah": 77,
+        "path": "full_recitation/077.mp3",
+        "bytes": 4569693,
+        "sha256": "93979abec2a6fffeb42df164c0e867b62f3c596ba01e0335e3ae596629c89327"
+      },
+      {
+        "surah": 78,
+        "path": "full_recitation/078.mp3",
+        "bytes": 4682121,
+        "sha256": "bc0fbb0118f59d5965c4ae195f876952daeb10aebae5d78a681dc3c4d69b1a78"
+      },
+      {
+        "surah": 79,
+        "path": "full_recitation/079.mp3",
+        "bytes": 4109937,
+        "sha256": "3e11a0af9bd7ef67f34a989c6c5baef4dc6e596856e4045836ab19da36b0e6b8"
+      },
+      {
+        "surah": 80,
+        "path": "full_recitation/080.mp3",
+        "bytes": 3533567,
+        "sha256": "7b8061c5bb64de7671cb3f4377a8d11dbb021e82ffa337b3fcac53c5daa1ec3f"
+      },
+      {
+        "surah": 81,
+        "path": "full_recitation/081.mp3",
+        "bytes": 2540081,
+        "sha256": "369d76c9344f0ec6b550c93966cb240fd494ed486426c59cf5118a8397e4ce91"
+      },
+      {
+        "surah": 82,
+        "path": "full_recitation/082.mp3",
+        "bytes": 2195266,
+        "sha256": "74e35c58683a81eaa66e489ca8842e77c4dcbd8d00adff28d6fba81938af3595"
+      },
+      {
+        "surah": 83,
+        "path": "full_recitation/083.mp3",
+        "bytes": 4971354,
+        "sha256": "b0d7f9590ff5c954e6349d648cfda02f91882cb63bca177ef8c231db80a73aff"
+      },
+      {
+        "surah": 84,
+        "path": "full_recitation/084.mp3",
+        "bytes": 2570176,
+        "sha256": "f74325659ec583142c38acdff956194ce6eebda5e679d38c2d3cff611c743918"
+      },
+      {
+        "surah": 85,
+        "path": "full_recitation/085.mp3",
+        "bytes": 3177886,
+        "sha256": "de922d513a46433f51addaa35c01624f99cfc1ccfa89cf14be23d88d2256ec3c"
+      },
+      {
+        "surah": 86,
+        "path": "full_recitation/086.mp3",
+        "bytes": 1610539,
+        "sha256": "6df0e18475a8936165569a736b2213dc37c928fb50f5af02a529944a2a15c8c1"
+      },
+      {
+        "surah": 87,
+        "path": "full_recitation/087.mp3",
+        "bytes": 1731746,
+        "sha256": "958d0629a42b735bcefc67d941a8eba6a774330f530015be4c15bb657e2336ca"
+      },
+      {
+        "surah": 88,
+        "path": "full_recitation/088.mp3",
+        "bytes": 2153472,
+        "sha256": "588569179d6e7cfb5068ce73c02dfe5eb92b29b60061ac3950dab0b935e131bd"
+      },
+      {
+        "surah": 89,
+        "path": "full_recitation/089.mp3",
+        "bytes": 3414450,
+        "sha256": "495e8c8724d43dafd18c481c214e06b2490734c8d69e5029ab8198ed84b36d9e"
+      },
+      {
+        "surah": 90,
+        "path": "full_recitation/090.mp3",
+        "bytes": 1927352,
+        "sha256": "8296a27597a598708266f2af322b51edf2a567fd12ab79eb405cd25c7842b6a5"
+      },
+      {
+        "surah": 91,
+        "path": "full_recitation/091.mp3",
+        "bytes": 1357675,
+        "sha256": "de2f17d212263f2e20e346330472785c24747cfb61bfe65d5f6a4c75f7b99ddf"
+      },
+      {
+        "surah": 92,
+        "path": "full_recitation/092.mp3",
+        "bytes": 1792768,
+        "sha256": "1d8df71133fbe1581939786919ed305bfbd7550912fca83336c6adde64526086"
+      },
+      {
+        "surah": 93,
+        "path": "full_recitation/093.mp3",
+        "bytes": 1048801,
+        "sha256": "3a82579ba2b28e282d82f0d78af5c98d3b3f1baa10d8fc535f4246ffbc880986"
+      },
+      {
+        "surah": 94,
+        "path": "full_recitation/094.mp3",
+        "bytes": 695209,
+        "sha256": "e75db9e5158a1ce6fad0e7a86f9e5a43486ba6e13e45f0e8b9e3f89295442529"
+      },
+      {
+        "surah": 95,
+        "path": "full_recitation/095.mp3",
+        "bytes": 1045874,
+        "sha256": "2bd394695976b1fc0ede2f2b9f8518bc88f99f4eb39f37bc9532393d3be08c0f"
+      },
+      {
+        "surah": 96,
+        "path": "full_recitation/096.mp3",
+        "bytes": 1529037,
+        "sha256": "b155ec9ca440d7fa42cb400c125e6353a6fda460b523ed6018bcc36bec8c4c27"
+      },
+      {
+        "surah": 97,
+        "path": "full_recitation/097.mp3",
+        "bytes": 729480,
+        "sha256": "836650a9db1bf16357448297717ad690ace39ebf33a6ac984ee5d9708471080c"
+      },
+      {
+        "surah": 98,
+        "path": "full_recitation/098.mp3",
+        "bytes": 2030173,
+        "sha256": "8041017aa706a1dd2f7ae7279be165477e614970c94cacf00eaaf1548300dcdc"
+      },
+      {
+        "surah": 99,
+        "path": "full_recitation/099.mp3",
+        "bytes": 966885,
+        "sha256": "edd9f31625bb42e11d63655067f5cfbf0d253ed5b3727bc99794224beb0b7140"
+      },
+      {
+        "surah": 100,
+        "path": "full_recitation/100.mp3",
+        "bytes": 1127380,
+        "sha256": "d2daf329e1da9e92006ee30fa60cc2eca328cbb6afd964b837b94054ca0e75cd"
+      },
+      {
+        "surah": 101,
+        "path": "full_recitation/101.mp3",
+        "bytes": 1007844,
+        "sha256": "fdc8e49cb75edcfe7e93e0fa99175ab9b0333e785ddbc25dc31bc5ffeba1efe3"
+      },
+      {
+        "surah": 102,
+        "path": "full_recitation/102.mp3",
+        "bytes": 1008681,
+        "sha256": "d626afb2ae75bf23149f76bd9e033c78a6ba38c9144d1054540767e66f8fcb98"
+      },
+      {
+        "surah": 103,
+        "path": "full_recitation/103.mp3",
+        "bytes": 445686,
+        "sha256": "926e58c18264de5eeec7c2786a470e7952a517f8e513a199ae2eacd1f55c8600"
+      },
+      {
+        "surah": 104,
+        "path": "full_recitation/104.mp3",
+        "bytes": 935537,
+        "sha256": "4ebfccef1666ad61878c67c99794fc97a0a9501fdcff0ad8792dc35f53f01c1a"
+      },
+      {
+        "surah": 105,
+        "path": "full_recitation/105.mp3",
+        "bytes": 786321,
+        "sha256": "610e072c0aca0e2c4c192340a9bb6855df19adca7c426adbf9b7165a59610772"
+      },
+      {
+        "surah": 106,
+        "path": "full_recitation/106.mp3",
+        "bytes": 687684,
+        "sha256": "bde32d790ad0da2c2423e79e4b5d73324609cb316d5569dea50fa532e4b6705b"
+      },
+      {
+        "surah": 107,
+        "path": "full_recitation/107.mp3",
+        "bytes": 928012,
+        "sha256": "c0aa87d6c7ca5a17c1d7124ebd6a619d6d61adecb7751949797abeedcff4d23b"
+      },
+      {
+        "surah": 108,
+        "path": "full_recitation/108.mp3",
+        "bytes": 399295,
+        "sha256": "6ebeb8b19ec463996e20952acbc96c6eaf43f3fc60355c88f248b195582a9027"
+      },
+      {
+        "surah": 109,
+        "path": "full_recitation/109.mp3",
+        "bytes": 875351,
+        "sha256": "31f0494810827e00eebc2f306d7c9c7a8c58faaae53b2b476c5091304dd2c795"
+      },
+      {
+        "surah": 110,
+        "path": "full_recitation/110.mp3",
+        "bytes": 566058,
+        "sha256": "a633680be6b94531c3db7aa902d90bb32e261bb3bd9aee5911eee3e44f39f1d2"
+      },
+      {
+        "surah": 111,
+        "path": "full_recitation/111.mp3",
+        "bytes": 672221,
+        "sha256": "14cafc914e20bc9b8e4e1958dbe03c14f32a43788b53e7c78a9ba1ca0294ad40"
       },
       {
         "surah": 112,
         "path": "full_recitation/112.mp3",
-        "bytes": 354155
+        "bytes": 354155,
+        "sha256": "269bbb62b31de70ef76ee427ff7ae38f99417475c078057378e9d0c2bc8a0aed"
+      },
+      {
+        "surah": 113,
+        "path": "full_recitation/113.mp3",
+        "bytes": 535966,
+        "sha256": "7c9ff4a0a57b8af5485cf11caf1c329f73589774f30b4db962215c7eb1fd1b6c"
+      },
+      {
+        "surah": 114,
+        "path": "full_recitation/114.mp3",
+        "bytes": 807637,
+        "sha256": "0e5c5713760072d118515036858f85292e5a11b4c5b44f5f64039a188b8a78e4"
       }
     ]
   }
