@@ -106,9 +106,18 @@ xcrun devicectl device process launch --device <UDID> --terminate-existing --con
 | 真机签名安装与启动 | 已通过 |
 | 真机内置样本自测 | 5/5 |
 | 真机三段离线语料 | 3/3，指标与 Android 完全一致（差值 0） |
-| **真机广播链路（麦克风实采 → 断句 → 匹配 → 翻译）** | **未验证，见 [真机验收记录](device-verification.md)** |
+| **真机广播链路（麦克风实采 → 断句 → 匹配 → 翻译）** | **未通过**：已开始验证，进入广播页触发语言包下载时闪退，根因已修（`62815c7`）；完整链路见 [真机验收记录](device-verification.md) |
 | 模拟器麦克风授权 | 不可用（`simctl privacy grant microphone` 无效） |
 | 原文覆盖（`reference_text.dart` 的设备文件路径） | 只接了 Android 私有目录，iOS 固定使用内置资产 |
+
+> **真机第一次跑广播链路暴露的缺陷（已修）**：进入广播页触发语言包下载时闪退。
+> 根因是**下载过程中切换目标语言**，原生 `OnDeviceTranslatorModelManager` 被中途释放，
+> 退出时抛 `PlatformException(cancelled, Model manager deallocated during download)`；
+> 而这条路径上无人处理它——引擎层只把「返回 false」当失败、页面层只
+> `catch TranslationException`，异常直接冒泡到 Dart VM。
+> 修复（`62815c7`）：① 引擎层把 `PlatformException` 转成分类 `TranslationException`，
+> 与「语言包缺失」走同一条可重试路径；② 页面层补通用兜底，准备失败只能是可恢复状态；
+> ③ `ModelManager` 改为长生命周期字段。**Android 侧行为不变。**
 
 ## 7. 首次编译曾经暴露的问题（避免重复踩）
 
