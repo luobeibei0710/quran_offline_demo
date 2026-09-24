@@ -97,5 +97,3 @@ class _QuranPageState extends State<QuranPage> {
 ## 验证
 
 在仓库根目录运行 `flutter pub get`、`flutter analyze`、`flutter test`。消费工程另行运行 `flutter build apk --debug` 与 `flutter build ios --debug --no-codesign`，再分别在 Android/iOS 真机验证授权、模型首次加载、开麦、停止后末句落库、重启历史与译本署名。模拟器或单测不能代替真机音频链路验收。
-
-2026-09-24 本地验证：仓库全量 231 项 Flutter 测试通过；独立临时消费工程仅通过 path 依赖和上述模型资产接入，`flutter analyze`、Android arm64 debug APK、iOS `--no-codesign` 构建通过。APK 合并 Manifest 含 `RECORD_AUDIO`，SDK 词表、全经 manifest 和宿主模型均已打包。独立消费 App 已在 Android 真机安装并进入广播首页，日志确认 ONNX 模型加载成功；此次没有执行开麦、实际音频推理、历史恢复及 iOS 真机验收。

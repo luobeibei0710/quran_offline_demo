@@ -194,7 +194,7 @@ def build_manifest(document: dict, token_table: Path) -> dict:
             "由 tools/broadcast_quran/generate_verse_tokens.py 从 assets/quran_offline/vocab.json "
             "与全经语料独立生成，不含旧经文库的任何文本或索引。上游 unigram 分词分数未公开，"
             "本表用确定性最少 token 数分词，因此排序分数的绝对值口径与旧库不同；"
-            "跨度惩罚与跨度上限的标定见 docs/matching.md。"
+            "跨度惩罚与跨度上限应结合目标语料重新标定。"
         ),
         "chapterMetadata": document["chapterMetadata"],
     }
