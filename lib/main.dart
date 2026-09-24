@@ -10,11 +10,20 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'broadcast/broadcast_services.dart';
-import 'broadcast/ui/broadcast_home_page.dart';
+import 'package:quran_broadcast_sdk/quran_broadcast_sdk.dart';
+import 'package:quran_broadcast_sdk/broadcast/ui/broadcast_home_page.dart';
 import 'quran_offline/quran_offline_demo_page.dart';
+
+/// 无人值守真机长测的自动启停时长（秒）。
+///
+/// 通过 `--dart-define=quran_auto_run_seconds=2100` 注入，仅在 Debug 包生效。
+/// 真机上禁止输入注入（MIUI 拒绝 `INJECT_EVENTS`），无法用 adb 点击界面按钮，
+/// 因此长时连续测试需要这条**仅 Debug 编译期生效**的入口；Release 与默认
+/// Debug 构建均为 0，不会自动开始或停止收音。
+const int kAutoRunSeconds = int.fromEnvironment('quran_auto_run_seconds');
 
 /// 程序入口。
 void main() {
@@ -72,7 +81,7 @@ class BroadcastBootstrapPage extends StatefulWidget {
 }
 
 class _BroadcastBootstrapPageState extends State<BroadcastBootstrapPage> {
-  BroadcastServices? _services;
+  QuranBroadcastSdk? _sdk;
   String? _error;
   bool _loading = true;
 
@@ -88,15 +97,16 @@ class _BroadcastBootstrapPageState extends State<BroadcastBootstrapPage> {
       _error = null;
     });
     try {
-      final services = await BroadcastServices.bootstrap();
+      final sdk = await QuranBroadcastSdk.initialize();
       if (!mounted) {
-        await services.dispose();
+        await sdk.dispose();
         return;
       }
       setState(() {
-        _services = services;
+        _sdk = sdk;
         _loading = false;
       });
+      unawaited(_maybeAutoRun(sdk));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -106,16 +116,39 @@ class _BroadcastBootstrapPageState extends State<BroadcastBootstrapPage> {
     }
   }
 
+  /// 无人值守长测：依赖就绪后自动开始收音，到时自动停止。
+  ///
+  /// 仅 `kDebugMode` 且显式注入 `quran_auto_run_seconds` 时执行；自动停止走
+  /// 正常 [QuranBroadcastSdk.stop] 流程，保证末句落库。
+  ///
+  /// @param sdk 已初始化的 SDK
+  Future<void> _maybeAutoRun(QuranBroadcastSdk sdk) async {
+    if (!kDebugMode || kAutoRunSeconds <= 0) return;
+    debugPrint('[Broadcast] 自动长测已启用：${kAutoRunSeconds}s 后自动停止（仅 Debug）');
+    final started = await sdk.start();
+    debugPrint('[Broadcast] 自动长测开始结果：$started');
+    if (!started) {
+      return;
+    }
+    await Future<void>.delayed(Duration(seconds: kAutoRunSeconds));
+    await sdk.stop();
+    debugPrint('[Broadcast] 自动长测已停止');
+  }
+
   @override
   void dispose() {
-    unawaited(_services?.dispose());
+    unawaited(_sdk?.dispose());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final services = _services;
-    if (services != null) return BroadcastHomePage(services: services);
+    final sdk = _sdk;
+    if (sdk != null) {
+      return sdk.homePage(
+        diagnosticPageBuilder: (_) => const QuranOfflineDemoPage(),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('古兰经广播识别')),
       body: Center(
@@ -134,16 +167,25 @@ class _BroadcastBootstrapPageState extends State<BroadcastBootstrapPage> {
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ] else ...<Widget>[
-                const Icon(Icons.error_outline, size: 40, color: Colors.redAccent),
+                const Icon(
+                  Icons.error_outline,
+                  size: 40,
+                  color: Colors.redAccent,
+                ),
                 const SizedBox(height: 12),
                 Text('初始化失败：$_error', textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: () => unawaited(_bootstrap()), child: const Text('重试')),
+                FilledButton(
+                  onPressed: () => unawaited(_bootstrap()),
+                  child: const Text('重试'),
+                ),
               ],
               const SizedBox(height: 24),
               TextButton(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const QuranOfflineDemoPage()),
+                  MaterialPageRoute<void>(
+                    builder: (_) => const QuranOfflineDemoPage(),
+                  ),
                 ),
                 child: const Text('进入开发诊断（旧 Demo）'),
               ),

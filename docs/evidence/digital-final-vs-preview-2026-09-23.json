@@ -1,0 +1,325 @@
+{
+  "wav": "<local-audio>/012_16k.wav",
+  "sampleRate": 16000,
+  "finalWindowSeconds": 30.0,
+  "previewWindowSeconds": 12.0,
+  "corpusId": "tanzil-1.1-uthmani-full",
+  "windows": [
+    {
+      "startSeconds": 145.0,
+      "final": {
+        "path": "final",
+        "wordCount": 20,
+        "segmentCount": 3,
+        "segmentSeconds": [
+          7.92,
+          19.69,
+          2.39
+        ],
+        "asrText": "في ايات للسائللين اذ قالوا ليوسف واخووه احب الي ابينا منا ونحن عصبه ان ابانا لفي ضلال مبين اقتلوا يوسف",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:8-9",
+        "coverage": 0.5689655172413793,
+        "precision": 0.825,
+        "confidence": 0.5774999999999999,
+        "rejectionReason": null
+      },
+      "preview": {
+        "path": "preview",
+        "wordCount": 4,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          12.0
+        ],
+        "asrText": "في ايات للسائلين ا",
+        "status": "candidate",
+        "scope": "partialVerse",
+        "candidateRef": "12:7-8",
+        "coverage": 0.13636363636363635,
+        "precision": 0.75,
+        "confidence": 0.5249999999999999,
+        "rejectionReason": "证据不足以确认（覆盖率 0.14、可信度 0.52）"
+      },
+      "wholeWindowSinglePass": {
+        "path": "whole30sSinglePass",
+        "wordCount": 20,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          30.0
+        ],
+        "asrText": "في اياتات للسائلين اذ قالوا ليوسف واخوه اح الي ابينا من ونحن عصبه ان ابانا لفي ضلال مبين اقتلوا يف",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:8-9",
+        "coverage": 0.5172413793103449,
+        "precision": 0.75,
+        "confidence": 0.5249999999999999,
+        "rejectionReason": null
+      }
+    },
+    {
+      "startSeconds": 155.0,
+      "final": {
+        "path": "final",
+        "wordCount": 28,
+        "segmentCount": 3,
+        "segmentSeconds": [
+          17.61,
+          9.03,
+          3.36
+        ],
+        "asrText": "قالو عمر يوسف واخوه احب ال ابينا منا وننحن عصبه ان ابانا لفي ضلال مبين اقتلوا يوسف او اطرحوه ارضا يخل لكم وجه ابيكم يخل لكم وجه ابيكم",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:8-9",
+        "coverage": 0.7241379310344828,
+        "precision": 0.75,
+        "confidence": 0.5249999999999999,
+        "rejectionReason": null
+      },
+      "preview": {
+        "path": "preview",
+        "wordCount": 9,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          12.0
+        ],
+        "asrText": "اق يف واخوه احب الي ابينا منا ونحن عصبه",
+        "status": "partial",
+        "scope": "partialVerse",
+        "candidateRef": "12:8",
+        "coverage": 0.5,
+        "precision": 0.8333333333333334,
+        "confidence": 0.5833333333333334,
+        "rejectionReason": null
+      },
+      "wholeWindowSinglePass": {
+        "path": "whole30sSinglePass",
+        "wordCount": 22,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          30.0
+        ],
+        "asrText": "يوسف واخوه احب ال ابينا منا ونحن عصبه ان ابانا لفي ضلال مبين اقتلوا يوسف او اطرحوه ارضا يخل لكم وجه ابكم",
+        "status": "partial",
+        "scope": "partialVerse",
+        "candidateRef": "12:8-9",
+        "coverage": 0.7241379310344828,
+        "precision": 0.9545454545454546,
+        "confidence": 0.6681818181818182,
+        "rejectionReason": null
+      }
+    },
+    {
+      "startSeconds": 165.0,
+      "final": {
+        "path": "final",
+        "wordCount": 23,
+        "segmentCount": 3,
+        "segmentSeconds": [
+          7.61,
+          9.03,
+          13.36
+        ],
+        "asrText": "ان ابانا لفي ضلال مبين اقتلوا يوسف او اطرحوه ارضا يخل لكم وجه ابيكم يخل لكم وجه ابيكم وتكونوا من بعده قوما صالحينين",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:8-9",
+        "coverage": 0.6206896551724138,
+        "precision": 0.782608695652174,
+        "confidence": 0.5478260869565217,
+        "rejectionReason": null
+      },
+      "preview": {
+        "path": "preview",
+        "wordCount": 6,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          12.0
+        ],
+        "asrText": "ا ابانا لفي ضلال مبين اقتل",
+        "status": "candidate",
+        "scope": "partialVerse",
+        "candidateRef": "12:8-9",
+        "coverage": 0.15517241379310345,
+        "precision": 0.75,
+        "confidence": 0.5249999999999999,
+        "rejectionReason": "证据不足以确认（覆盖率 0.16、可信度 0.52）"
+      },
+      "wholeWindowSinglePass": {
+        "path": "whole30sSinglePass",
+        "wordCount": 19,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          30.0
+        ],
+        "asrText": "ان ابانا لفي ضلال مبين اقتلوا يوسف او اطرحوه ارضا يخل لكم وجه ابيكم وتكونوا من بعده قوما صالحين",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:8-9",
+        "coverage": 0.6379310344827587,
+        "precision": 0.9736842105263158,
+        "confidence": 0.6815789473684211,
+        "rejectionReason": null
+      }
+    },
+    {
+      "startSeconds": 175.0,
+      "final": {
+        "path": "final",
+        "wordCount": 25,
+        "segmentCount": 3,
+        "segmentSeconds": [
+          6.64,
+          12.98,
+          10.38
+        ],
+        "asrText": "او اطررحوه اررضا يخل لكم وجه ابيكم يخل لكم وجه ابيكم وتكونوا من بعده قوما صالحين قال قائل منهم لا تقتلوا يوسف والقوه في غد.",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:9-10",
+        "coverage": 0.5666666666666667,
+        "precision": 0.68,
+        "confidence": 0.476,
+        "rejectionReason": null
+      },
+      "preview": {
+        "path": "preview",
+        "wordCount": 7,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          12.0
+        ],
+        "asrText": "ساو ارحوه ارضا يخل لكم وجه ابيكم",
+        "status": "candidate",
+        "scope": "partialVerse",
+        "candidateRef": "12:9",
+        "coverage": 0.4642857142857143,
+        "precision": 0.9285714285714286,
+        "confidence": 0.65,
+        "rejectionReason": "证据不足以确认（覆盖率 0.46、可信度 0.65）"
+      },
+      "wholeWindowSinglePass": {
+        "path": "whole30sSinglePass",
+        "wordCount": 21,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          30.0
+        ],
+        "asrText": "او اطرحوه ارضا يخل لكم وجه ابيكم وتكونوا من بعده قوما صالح قال قائل منهم لا تقتلوا يوسف والقوه في غ",
+        "status": "partial",
+        "scope": "partialVerse",
+        "candidateRef": "12:9-10",
+        "coverage": 0.6333333333333333,
+        "precision": 0.9047619047619048,
+        "confidence": 0.6333333333333333,
+        "rejectionReason": null
+      }
+    },
+    {
+      "startSeconds": 185.0,
+      "final": {
+        "path": "final",
+        "wordCount": 21,
+        "segmentCount": 2,
+        "segmentSeconds": [
+          9.62,
+          20.38
+        ],
+        "asrText": "وتكونوا من بعده قوما صالحين قال قائل منهم لا تقتلوا يوسف والقوه في غيابت الجب يلتقطه بعض السياره ان كنتم فاعلين",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:9-10",
+        "coverage": 0.7,
+        "precision": 1.0,
+        "confidence": 0.7,
+        "rejectionReason": null
+      },
+      "preview": {
+        "path": "preview",
+        "wordCount": 6,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          12.0
+        ],
+        "asrText": "قال وتكونوا من بعده قوما صالحين",
+        "status": "candidate",
+        "scope": "partialVerse",
+        "candidateRef": "12:9",
+        "coverage": 0.35714285714285715,
+        "precision": 0.8333333333333334,
+        "confidence": 0.5833333333333334,
+        "rejectionReason": "证据不足以确认（覆盖率 0.36、可信度 0.58）"
+      },
+      "wholeWindowSinglePass": {
+        "path": "whole30sSinglePass",
+        "wordCount": 21,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          30.0
+        ],
+        "asrText": "وتكونونوا من بعده قوما صالحين قال قائل منهم لا تقتلوا يوسف والقوه في غيابت الجب يلتقطه بعض السياره ان كنتم فاعلين",
+        "status": "confirmed",
+        "scope": "completeVerses",
+        "candidateRef": "12:10",
+        "coverage": 1.0,
+        "precision": 0.7619047619047619,
+        "confidence": 0.8333333333333333,
+        "rejectionReason": null
+      }
+    },
+    {
+      "startSeconds": 195.0,
+      "final": {
+        "path": "final",
+        "wordCount": 23,
+        "segmentCount": 2,
+        "segmentSeconds": [
+          21.73,
+          8.27
+        ],
+        "asrText": "قال قائ منهم لاا تقتلوا يوسف واقوه في غيابت الجب يلتقطه بعض السياره ان كنتم فااعلين قالوا يا ابانا ما لك لا تاما",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:10-11",
+        "coverage": 0.7592592592592593,
+        "precision": 0.8913043478260869,
+        "confidence": 0.6239130434782608,
+        "rejectionReason": null
+      },
+      "preview": {
+        "path": "preview",
+        "wordCount": 10,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          12.0
+        ],
+        "asrText": "قال قائل منهم لا تقتلوا يوسف والقوه في غيابت الجب",
+        "status": "partial",
+        "scope": "partialVerse",
+        "candidateRef": "12:10",
+        "coverage": 0.625,
+        "precision": 1.0,
+        "confidence": 0.7,
+        "rejectionReason": null
+      },
+      "wholeWindowSinglePass": {
+        "path": "whole30sSinglePass",
+        "wordCount": 23,
+        "segmentCount": 1,
+        "segmentSeconds": [
+          30.0
+        ],
+        "asrText": "قال قائل منهم لا تقتلوا يوسف والقوه في غيابت الجب يلتقطه بعض السياره ان كنتتم فاعلين قالوا يا ابانا ما لك لا تامنا",
+        "status": "partial",
+        "scope": "mixed",
+        "candidateRef": "12:10-11",
+        "coverage": 0.8148148148148148,
+        "precision": 0.9565217391304348,
+        "confidence": 0.6695652173913044,
+        "rejectionReason": null
+      }
+    }
+  ]
+}

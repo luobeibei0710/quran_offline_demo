@@ -41,7 +41,7 @@
   ],
   "complete": true,
   "builtInSamples": "5/5",
-  "rawLog": "offline-accuracy-ios-console.txt",
+  "rawLog": "local-only (not published)",
   "baseCommit": "313835695352ddb8dfed02ed13f5aeef6e9f4892",
   "uncommittedChanges": true,
   "sourceFingerprint": {

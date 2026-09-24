@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_decoder.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_scorer.dart';
-import 'package:quran_offline_demo/quran_offline/offline_transcriber.dart';
-import 'package:quran_offline_demo/quran_offline/ort_runner.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_decoder.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_scorer.dart';
+import 'package:quran_broadcast_sdk/quran_offline/offline_transcriber.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ort_runner.dart';
 
 void main() {
   group('OfflineTranscriber.segmentBounds', () {

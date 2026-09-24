@@ -11,7 +11,10 @@ ONNX 声学模型推理 → CTC 解码 → **全经 6236 节**经文匹配 → *
 Android 与 iOS 共用同一套 Dart 算法层，平台差异只在「调 ONNX Runtime 推理」这一层
 （`quran_offline/ort` 通道）。
 
-> **产品首页是广播识别**（`lib/broadcast/`）。
+广播功能已抽为可通过 path 依赖安装的 [Flutter SDK](packages/quran_broadcast_sdk/README.md)：
+插件自带 Android/iOS 推理桥、全经语料与译本；宿主提供未入库的兼容 ONNX 模型与麦克风权限说明。
+
+> **产品首页是广播识别**（`packages/quran_broadcast_sdk/lib/broadcast/`）。
 > 早期 Demo（实时跟读、语料准确度校核、流式诊断）已降级为**开发诊断**，
 > 入口在首页右上角的扳手图标（或初始化失败页的「进入开发诊断」按钮），
 > 说明见 [旧 Demo 与流式链路](docs/legacy-demo.md)。
@@ -30,8 +33,8 @@ Android 与 iOS 共用同一套 Dart 算法层，平台差异只在「调 ONNX R
   QuranEnc 授权，界面显示出版方与版本），查不到才走机器翻译；
 - **端侧机器翻译兜底**：ML Kit（`google_mlkit_translation` 0.14.0），
   阿拉伯语经英语中转；缺语言包时明确失败并支持重试，**不降级到云服务**；
-- **实时预览 + 终稿**：收音过程中以 1 秒周期刷新草稿、候选经文与预览译文，
-  片段结束（静音或超长切分）后落库为终稿；
+- **实时预览 + 终稿**：有新音频时最短间隔 1 秒尝试刷新最近 12 秒的转写草稿与候选经文，
+  同一候选连续两轮稳定后显示对应的预览译文；片段结束（静音或超长切分）后用完整音频复核并落库；
 - **片段的粒度是「一句」不是「一节」**：支持半节、跨节连读、同节复读、跳章；
   匹配结果以节范围表达，不强行补全未听到的内容；
 - **库外内容如实拒识**：匹配不到就显示未匹配并保留真实转写，
@@ -115,7 +118,7 @@ AppBar 右上角两个入口：**记录 N**（历史列表）与**扳手图标**
 | 平台 | 要求 |
 |------|------|
 | 通用 | Flutter 3.41+（CI 固定 3.41.8）、Dart SDK `^3.11.5` |
-| Android | Android SDK（compileSdk 随 Flutter）、JDK 17、NDK `29.0.14206865`、minSdk 26 |
+| Android | Android SDK 36（插件 compileSdk）、JDK 17、NDK `29.0.14206865`、minSdk 26 |
 | iOS | Xcode 26+、CocoaPods 1.16+、部署目标 **iOS 15.5**（详见 [iOS 平台说明](docs/platform-ios.md)） |
 
 ### 1. 获取模型与数据
@@ -140,7 +143,7 @@ bash tools/quran_offline/download_corpus.sh
 `:warning:` `sample_*.wav`（内置单节样本）不由任何脚本提供，需自行准备并按
 `sample_SSSAAA.wav` 命名放入 `assets/quran_offline/`，否则开发诊断页的内置样本自测会显示失败。
 
-广播功能的**全经语料与译本已入版本库**（`assets/broadcast_quran/full/`），
+广播功能的**全经语料与译本已入版本库**（`packages/quran_broadcast_sdk/assets/broadcast_quran/full/`），
 无需额外下载。仅在需要重建时才运行构建脚本，见 [资产与脚本](#资产与脚本)。
 
 ### 2. 运行
@@ -195,7 +198,7 @@ x_q → DequantizeLinear(x_q, x_scale, x_zp) → Conv(x_dq, w_fp32)
 
 ### 广播语料库（全经，入版本库）
 
-`assets/broadcast_quran/full/`：
+`packages/quran_broadcast_sdk/assets/broadcast_quran/full/`：
 
 | 文件 | 体积 | 说明 |
 |------|------|------|
@@ -248,9 +251,9 @@ python3 tools/broadcast_quran/build_full_corpus.py
 
 # 生成 CTC token 表（跨度上限 8；--verify-legacy 可与官方表比对一致率）
 python3 tools/broadcast_quran/generate_verse_tokens.py \
-  --verses assets/broadcast_quran/full/quran.json \
+  --verses packages/quran_broadcast_sdk/assets/broadcast_quran/full/quran.json \
   --vocab assets/quran_offline/vocab.json \
-  --output assets/broadcast_quran/full/verse_ctc_tokens.json \
+  --output packages/quran_broadcast_sdk/assets/broadcast_quran/full/verse_ctc_tokens.json \
   --max-span 8
 
 # 下载 62 种语言译本（逐个校验 license.status == granted，未授权即拒绝打包）
@@ -294,7 +297,7 @@ python3 tools/broadcast_quran/fetch_translations.py
 
 ```bash
 flutter analyze   # 静态分析
-flutter test      # 24 个测试文件 / 207 个用例
+flutter test      # 26 个测试文件 / 231 个用例（2026-09-24 本地验证）
 ```
 
 测试所需的资产全部随仓库分发，**干净 clone 后无需下载任何东西**即可跑通全套测试：
@@ -302,8 +305,8 @@ flutter test      # 24 个测试文件 / 207 个用例
 - 旧 Demo 侧的用例通过 `FakeAssetBundle` 注入最小化内存资产、
   通过 `ScriptedOrtRunner` 注入合成声学证据、通过 `buildSpeechLikeSamples` 生成可驱动 VAD 的
   类语音信号，不读真实模型；
-- 广播侧的 6 个测试文件读取**已入库**的全经语料与译本（`assets/broadcast_quran/full/**`），
-  并需要共享词表 `assets/quran_offline/vocab.json`（也已入库，见
+- 广播侧测试读取**已入库**的全经语料与译本（`packages/quran_broadcast_sdk/assets/broadcast_quran/full/**`），
+  并需要包内词表 `packages/quran_broadcast_sdk/assets/quran_offline/vocab.json`（也已入库，见
   [获取模型与数据](#1-获取模型与数据)）。
 
 真机麦克风与模型推理仍需 `flutter run` 验证。
@@ -356,82 +359,37 @@ CI 定义见 `.github/workflows/ci.yml`，三个 Job：
 
 ## 项目结构
 
+```text
+packages/quran_broadcast_sdk/
+├── lib/quran_broadcast_sdk.dart            对外入口：初始化、会话、语言、历史与页面
+├── lib/broadcast/                     收音、断句、转写、全经匹配、翻译与 SQLite
+├── lib/quran_offline/                 广播与旧 Demo 共用的 CTC、匹配、对齐算法
+├── android/                           Flutter 插件、ONNX Runtime 1.22.0 推理桥
+├── ios/                               Flutter 插件、ONNX Runtime 1.22.0 推理桥
+└── assets/                            全经语料、词表与 62 种语言译本
+lib/main.dart                         应用入口与启动引导页
+lib/quran_offline/                    旧 Demo 页面、语料校核与诊断代码
+assets/quran_offline/                宿主模型与旧 Demo 数据（模型不入库）
+resources/broadcast_quran/            上游归档与未打包的全经音频
+tools/                                模型转换、语料生成、基准与诊断脚本
+test/                                 广播与旧 Demo 回归测试
+docs/                                 架构、匹配、验收与平台文档
 ```
-lib/
-├── main.dart                                          应用入口 + 引导页（首页 = 广播识别）
-├── broadcast/                                         广播识别（产品功能）
-│   ├── broadcast_services.dart                        依赖组装与生命周期（应用级单实例）
-│   ├── application/
-│   │   ├── microphone_source.dart                     16 kHz 单声道收音适配
-│   │   ├── utterance_segmenter.dart                   断句状态机（本底自适应能量 + 静音时长）
-│   │   ├── broadcast_transcriber.dart                 片段实际 ASR（保留声学证据供匹配复用）
-│   │   ├── quran_match_service.dart                   全经匹配 + 候选裁决 + 指标与阈值
-│   │   ├── translation_coordinator.dart               来源策略 / 缓存 / 重试 / 任务队列
-│   │   └── broadcast_session_controller.dart          收音 → 断句 → 预览 → 终稿 → 落库
-│   ├── data/
-│   │   ├── app_database.dart                          SQLite 建库与迁移（schemaVersion 1）
-│   │   ├── record_repository.dart                     事务保存 / 分页 / 幂等 / 重启恢复 / 缓存
-│   │   ├── broadcast_corpus.dart                      全经语料库（数据驱动，含独立索引）
-│   │   └── translation_catalog.dart                   62 语言译本目录与按需查表
-│   ├── domain/utterance_record.dart                   三类文本 + 指标 + 译文模型与全部状态枚举
-│   ├── translation/
-│   │   ├── offline_translation_engine.dart            引擎契约与失败分类
-│   │   ├── mlkit_translation_engine.dart              ML Kit 端侧翻译适配器（33 语言白名单）
-│   │   └── verse_translation_repository.dart          校订译本仓储接口与空实现
-│   └── ui/
-│       ├── broadcast_home_page.dart                   三栏首页
-│       ├── record_list_page.dart                      历史列表（分页 / 筛选 / 清空）
-│       ├── record_detail_page.dart                    详情（三类文本 / 指标 / 逐词比对 / 追加语言）
-│       └── widgets/text_section_card.dart             文本卡片（RTL 与徽标）
-└── quran_offline/                                     旧 Demo 与共享算法层
-    ├── arabic_presentation_forms.dart                 Unicode 15.0 Presentation Forms 兼容分解表
-    ├── quran_text.dart                                阿拉伯语归一化与相似度
-    ├── ctc_decoder.dart                               贪心 CTC 解码
-    ├── ctc_scorer.dart                                前向后向对数似然 + 稳定前缀
-    ├── quran_word_progress.dart                       词边界切分 + 已读词估算（提词器）
-    ├── quran_assets.dart                              旧经文库 / 词表 / span 表加载 + VerseIndex
-    ├── quran_matcher.dart                             召回 + 精排 + 置信度（两库共用）
-    ├── ort_runner.dart                                推理桥接口（平台通道）
-    ├── quran_recognizer.dart                          一次性识别 + 流式会话（含 VAD 门控）
-    ├── transcript_stitcher.dart                       转写稿增量拼接（按最长词级重叠去重）
-    ├── timed_transcript.dart                          带时间戳窗口的实际 ASR 转写拼接
-    ├── offline_transcriber.dart                       声学暂停分段与有界离线实际 ASR
-    ├── offline_corpus_check.dart                      无头端侧验收（不进 UI）
-    ├── word_alignment.dart                            词级对齐、判定阈值与比对指标
-    ├── word_error_rate.dart                           严格词错误率
-    ├── reference_text.dart                            比对原文加载（设备文件 / 内置资产）
-    ├── quran_compare_page.dart                        原文 / 转写逐词对照页
-    ├── corpus_audio.dart                              语料 WAV 解码与格式校验
-    ├── corpus_catalog.dart                            内置连续语料清单 + 设备自定义语料
-    ├── corpus_runner.dart                             旧流式章节重建诊断（按实时节奏灌音）
-    ├── corpus_verify_page.dart                        语料页（默认离线实际 ASR，可切旧流式诊断）
-    └── quran_offline_demo_page.dart                   开发诊断主页面
-android/app/src/main/java/com/llvision/quran_offline_demo/QuranOrtBridge.java   ONNX Runtime 桥
-android/app/src/main/kotlin/com/llvision/quran_offline_demo/MainActivity.kt     通道注册
-ios/Runner/QuranOrtBridge.{h,m}                     ONNX Runtime 桥
-ios/Runner/AppDelegate.swift                        通道注册
-test/                                               单元测试与页面冒烟测试
-assets/broadcast_quran/full/                        广播全经语料 + 62 语言译本（入版本库）
-assets/quran_offline/                               模型与旧库资产（模型不入版本库；vocab.json 入库）
-assets/quran_offline/corpus/                        语料校核用的多节连续诵读（不入版本库）
-assets/quran_reference/                             旧比对页原文（入版本库）
-resources/broadcast_quran/                          上游归档 + 全经音频清单（音频不入版本库）
-tools/broadcast_quran/                              全经语料构建、token 表生成、译本下载
-tools/quran_offline/                                模型改造、资产下载与 Python 验证脚本
-tool/                                               Dart 基准与标定脚本（flutter test / dart run）
-docs/                                               架构、匹配、验收与平台文档
-.github/workflows/ci.yml                            静态分析 + 测试 + APK 构建 + iOS 编译
-```
-
 ## 真机验收记录
 
-> **状态：Android 侧 5/6 满足，仅缺 iOS 真机。**
-> 2026-09-21 完成首轮全经连续播放（33 分钟 / 42 条记录 / 0 崩溃）。
-> 验收矩阵 6 项中 **5 项满足**：连续收听时长、定位正确性、译文来源、
-> F1（top10 均值 0.876 ≥ 0.80）、Android 真机。
-> **iOS 真机已在推进**：进入广播页触发语言包下载时闪退，根因已定位并修复
-> （`62815c7`），但完整链路尚未通过验收。
-> **在它通过前，广播链路不得声称已验收。**
+> **状态：验收矩阵 6/6 满足。**
+> 2026-09-21 完成首轮全经连续播放（33 分钟 / 42 条记录 / 0 崩溃），Android 侧
+> 5 项满足。**iOS 真机已于 2026-09-23 通过**（iPhone 17 Pro / iOS 26.6）：267 条终稿、
+> 46 条有经文范围、第 78 章连续推进、0 失败 0 崩溃，证据见
+> [iOS 真机实测](docs/evidence/live-three-column-ios-2026-09-23.md)。
+> 仍未覆盖的是 iOS 侧 ≥30 分钟连续稳定性与两端同一音源的逐节一致性。
+
+本分支的 12 秒预览与三栏同步改动已在 Android 做第 12 章约 452 秒局部试播；[本轮证据](docs/evidence/live-three-column-android-2026-09-23.md)单独记录。以下矩阵和性能数字仍来自改动前的完整播放，不能由本次局部试播替代。
+
+同日第二轮工作（数字音源对照、时延埋点、候选统计与三栏 widget 回归）见
+[第二轮验证证据](docs/evidence/codebuddy-three-column-followup-2026-09-23.md)。该轮把
+第 6 段丢词的责任限定到输入侧（数字音源同一路径稳定识别 20–28 词），但**没有取得新的有效
+真机录音**；iOS 真机已在同日单独补齐（见上），**Android ≥30 分钟连续测试仍为未验证**。
 
 | 维度 | 目标 | 状态 |
 |------|------|------|
@@ -440,7 +398,7 @@ docs/                                               架构、匹配、验收与�
 | 译文来源 | `curatedEdition` 占比接近 100% | ✅ 95.2%（40/42；另 2 条 `machineAsr` 落在未匹配上，属设计内兜底） |
 | F1 | F1 最高的 10 条记录，均值 ≥ 0.80 | ✅ **top10 均值 0.876**（最低 0.827） |
 | Android 真机 | 链路在 Android 真机跑通 | ✅ Redmi 24117RK2CC |
-| iOS 真机 | 链路在 iOS 真机跑通 | ❌ 未通过：已开始验证，进入广播页触发语言包下载时闪退，根因已修（`62815c7`），完整链路未验收 |
+| iOS 真机 | 链路在 iOS 真机跑通 | ✅ iPhone 17 Pro / iOS 26.6（2026-09-23）：修掉 `PERMISSION_MICROPHONE` 宏缺失、息屏挂起与 ML Kit 语言包并发下载三个阻塞点后跑通 |
 
 其余维度（诵读者覆盖、章节覆盖、库外负样本、延迟、拾音分档）仍照常记录在
 §3，但**不再作为验收门槛**。
@@ -452,18 +410,22 @@ docs/                                               架构、匹配、验收与�
 
 ## 已知限制
 
-- **广播链路的真机验收仅剩 iOS（最重要的一条）**。首轮 33 分钟全经连续播放已证明链路在
+- **广播链路的真机验收两端均已通过**。首轮 33 分钟全经连续播放已证明链路在
   真实外放拾音下可用（42 条记录、0 崩溃、节号单调递增、`curatedEdition` 占 95.2%、
-  F1 最高的 10 条均值 0.876）。收敛后的 6 项验收矩阵里 **5 项满足，仅 iOS 真机未做**，
-  因此尚不能声称已验收。
-  见上方「真机验收记录」与 [真机验收记录](docs/device-verification.md)。
-- **ML Kit 机器翻译的完整链路未验收**：语言包需动态下载（不能随包分发），
-  端侧翻译模型依赖 Google Play 服务，无 GMS 设备的可用性未验证；
+  F1 最高的 10 条均值 0.876）；iOS 真机于 2026-09-23 补齐（iPhone 17 Pro / iOS 26.6，
+  267 条终稿、第 78 章连续推进、0 崩溃），收敛后的 6 项验收矩阵 **6 项满足**。
+  iOS 侧尚未覆盖的是 **≥30 分钟连续稳定性** 与 **同一音源下的两端逐节一致性**。
+  见 [真机验收记录](docs/device-verification.md) 与
+  [iOS 真机实测](docs/evidence/live-three-column-ios-2026-09-23.md)。
+- **ML Kit 机器翻译仍有未验收的边界**：语言包需动态下载（不能随包分发），
+   Android 与 iOS 真机上都已跑通（iOS 侧见下），但**无 GMS 设备的可用性未验证**；
   阿→中经英语中转，中文质量必须单独评估，不能用英文结果推定。
-  iOS 真机上已跑过准备路径并暴露一个缺陷：**下载语言包过程中切换目标语言会让原生
-  `ModelManager` 中途失去引用**（`Model manager deallocated during download`），
-  异常原本冒泡到 Dart VM 导致闪退，现已转为可分类、可重试的失败状态（`62815c7`）；
-  Android 侧行为不变。
+  iOS 真机上已跑过准备路径并暴露一个缺陷：**原生 `ModelManager` 会在下载中途失去
+  引用**（`Model manager deallocated during download`）。异常原本冒泡到 Dart VM
+  导致闪退，现已转为可分类、可重试的失败状态（`62815c7`）；**下载本身仍会失败**，
+  根因是插件 iOS 侧每次调用都新建 `GenericModelManager` 并覆盖字段，旧实例被 ARC
+  释放，因此引擎侧把所有原生调用串行化、下载期间不再查询状态（2026-09-23）。
+  修复后 iOS 实采链路的机器翻译 0 失败；Android 侧行为不变。
 - **iOS 模拟器不能跑广播功能**：ML Kit 的传递依赖声明不支持 arm64 模拟器，
   iOS 侧只能真机验证（编译链接由 CI 覆盖）。
 - **62 种译本只在中文与英文上做过端到端验证**，其余 60 种仅校验了目录条目、
@@ -475,10 +437,13 @@ docs/                                               架构、匹配、验收与�
   检验（结果相同），`maxSpan = 8` 由端到端真实音频暴露的「跨度不足」确定；
   但标定素材是**单个诵读者 + 主机直连音频**，真机外放拾音下的确认与拒识行为
   仍需与人工标注对照。
-- **预览路径未降配**：首轮真机实测预览匹配 P50 615 ms / P95 1696 ms（n=635），
-  P95 已超过 1 s 的预览周期；调度是「上一次完成后再排下一次」所以不积压，
-  代价是刷新率随片段长度下降。端到端终稿 P50 4062 ms / P95 5733 ms（n=42，含翻译）。
-  理论上预览应使用更小的 `topK` / `maxSpan`，尚未验证必要性。
+- **三栏预览已有 Android 局部实测**：旧版首轮真机预览 P50 615 ms / P95 1696 ms（n=635），
+  终稿 P50 4062 ms / P95 5733 ms（n=42）；新版第 12 章约 452 秒试播的“最新音频块→转写/候选 UI 帧”
+  P50 647 ms / P95 972 ms（n=384）。两版计时口径不同，不能直接比较改善幅度。
+  新版将预览限制为最近 12 秒、一次模型前向并合并积压请求；完整端到端译文时延与准确率仍须验收。
+  第二轮工作把第 6 段丢词定位到输入侧，但**未取得新的真机录音**：Android ≥30 分钟连续与 iOS 真机均为未验证。
+  见[三栏实时同步方案](docs/live-three-column-sync.md)、[局部实测证据](docs/evidence/live-three-column-android-2026-09-23.md)
+  与[第二轮验证证据](docs/evidence/codebuddy-three-column-followup-2026-09-23.md)。
 - **应用体积大**：包含 124.6 MB 模型 + 42.9 MB token 表 + 89 MB 译本，
   debug APK 约 380 MB；正式交付需按需下载或只打单 ABI。
 - **旧 Demo 的流式链路仍是工程化简版**：实时路径的 VAD 音频内信噪比判据
@@ -490,22 +455,27 @@ docs/                                               架构、匹配、验收与�
 - **模型与测试音频未入库**：模型、`sample_*.wav` 与内置语料 WAV 都不进版本库
   （词表 `vocab.json` 例外，仅 21 KB，随仓库分发以保证测试可离线运行），
   clone 后需分别准备，否则相应验证会显示「识别失败」或「不可用」。
-- **iOS 真机尚未跑通广播链路**：三段内置语料的 F1/P/R 与 Android 完全一致；
-  广播链路也已开始真机验证（「进入页面即闪退」的缺陷已修，见上一条），
-  但「收音 → 断句 → 匹配 → 翻译」的完整验收在 iOS 上仍未完成。
+- **iOS 真机广播链路已跑通**：2026-09-23 完成「收音 → 断句 → 匹配 → 翻译 → 落库」
+  的单次真机验证，详见 [iOS 真机实测](docs/evidence/live-three-column-ios-2026-09-23.md)；
+  三栏第二轮的 iOS 长时复验仍未执行。
 
 ## 更多文档
 
 | 文档 | 内容 |
 |------|------|
+| [packages/quran_broadcast_sdk/README.md](packages/quran_broadcast_sdk/README.md) | SDK 安装、模型与权限、接口、生命周期、许可和消费工程验收 |
 | [docs/architecture.md](docs/architecture.md) | 分层结构、数据流、依赖组装、数据模型与状态机 |
+| [docs/live-three-column-sync.md](docs/live-three-column-sync.md) | 三栏预览的有界推理、版本同步、译文来源、延迟验收与回滚边界 |
+| [docs/codebuddy-three-column-test-handoff-2026-09-23.md](docs/codebuddy-three-column-test-handoff-2026-09-23.md) | CodeBuddy 后续测试开发交接：完成点、缺口、分阶段任务、验收与可复制任务文本 |
+| [docs/evidence/codebuddy-three-column-followup-2026-09-23.md](docs/evidence/codebuddy-three-column-followup-2026-09-23.md) | 第二轮验证：数字音源对照、时延埋点口径、候选统计、widget 回归与未验证项 |
 | [docs/matching.md](docs/matching.md) | 匹配算法、阈值常量、指标口径、端到端证据与真机 P50/P95 |
 | [docs/offline-accuracy.md](docs/offline-accuracy.md) | 三段内置语料的离线实际 ASR 验收（主机 / Android / iOS） |
 | [docs/device-verification.md](docs/device-verification.md) | **真机验收记录**（6 项矩阵、逐条记录与代表条目、性能 P50/P95、记录方法） |
 | [docs/platform-android.md](docs/platform-android.md) | Android 构建安装、系统限制与替代手段、抓音质量校准 |
 | [docs/platform-ios.md](docs/platform-ios.md) | iOS 支持、必需配置、依赖共存与模拟器限制 |
+| [docs/publication-policy.md](docs/publication-policy.md) | 公开仓库的源码、数据、日志与凭据发布边界和提交前检查 |
 | [docs/legacy-demo.md](docs/legacy-demo.md) | 旧 Demo（实时跟读 / 语料校核 / 流式诊断）与流式链路经验 |
-| [docs/evidence/](docs/evidence/) | 机器可读验收证据（离线 ASR 指标、真机全经播放逐条记录与汇总） |
+| [docs/evidence/](docs/evidence/) | 经检查的机器可读指标和脱敏验收摘要；原始设备日志仅在本地留存 |
 
 ### 文档维护约定
 
@@ -532,7 +502,7 @@ docs/                                               架构、匹配、验收与�
   （模型 CC-BY-4.0，基座 `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`），
   `tools/quran_offline/reference/*.ts` 为 Tilawa 的 MIT 参考实现，仅用于对照 Dart 侧语义；
 - 全经原文快照来自 [Tanzil Project](https://tanzil.net/)（CC-BY 3.0，许可与上游 SHA-256
-  见 `assets/broadcast_quran/full/manifest.json` 与 `NOTICE.txt`）；
+  见 `packages/quran_broadcast_sdk/assets/broadcast_quran/full/manifest.json` 与 `NOTICE.txt`）；
 - 章名元数据来自 [risan/quran-json](https://github.com/risan/quran-json)（CC BY-SA 4.0）；
 - 62 种语言人工译本来自 QuranEnc（经 [risan/quran-json](https://github.com/risan/quran-json) 分发），
   每个语言文件与目录条目都带出版方、版本、来源与许可全文，

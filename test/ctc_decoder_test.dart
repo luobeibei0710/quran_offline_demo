@@ -4,7 +4,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_decoder.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_decoder.dart';
 
 /// 构造「逐帧 argmax 命中指定 token」的 log 概率矩阵。
 ///

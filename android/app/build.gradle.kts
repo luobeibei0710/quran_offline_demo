@@ -40,11 +40,6 @@ android {
     }
 }
 
-dependencies {
-    // 古兰经离线识别：ONNX Runtime（模型为 int4/int8 混合量化）
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
-}
-
 flutter {
     source = "../.."
 }

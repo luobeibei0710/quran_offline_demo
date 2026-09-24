@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/broadcast/data/app_database.dart';
-import 'package:quran_offline_demo/broadcast/data/record_repository.dart';
-import 'package:quran_offline_demo/broadcast/domain/utterance_record.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/app_database.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/record_repository.dart';
+import 'package:quran_broadcast_sdk/broadcast/domain/utterance_record.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {

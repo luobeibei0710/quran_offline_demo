@@ -2,8 +2,8 @@
 
 本文说明「一段转写文本如何被定位到全经第几章第几节」，
 以及界面上的覆盖率 / 解释比例 / F1 / 严格 WER 到底是什么口径。
-实现位于 `lib/broadcast/application/quran_match_service.dart`（广播侧裁决）与
-`lib/quran_offline/quran_matcher.dart`（召回 + 精排，两库共用）。
+实现位于 `packages/quran_broadcast_sdk/lib/broadcast/application/quran_match_service.dart`（广播侧裁决）与
+`packages/quran_broadcast_sdk/lib/quran_offline/quran_matcher.dart`（召回 + 精排，两库共用）。
 
 ## 1. 问题定义与约束
 
@@ -84,7 +84,7 @@ A 的按帧分数更优（它只用到高概率的前 5 个位置），于是纯
 
 ## 3. 阈值常量
 
-`BroadcastMatchConfig` 的默认值（`lib/broadcast/application/quran_match_service.dart`）：
+`BroadcastMatchConfig` 的默认值（`packages/quran_broadcast_sdk/lib/broadcast/application/quran_match_service.dart`）：
 
 | 参数 | 默认 | 作用 |
 |------|------|------|
@@ -289,11 +289,13 @@ WER = (S + D + I) / 原文词数
    多诵读者、多距离、多底噪条件下的确认与拒识行为没有对照数据；
 3. **重复节的歧义行为未专门设计用例**：至仁主章有 31 次重复节，
    本轮三个窗口都落在唯一节上，没有验证歧义场景的状态表达；
-4. **预览路径未降配**：实测预览匹配 P95 1696 ms（n=635）已超过 1 s 的预览周期，
-   理论上预览应使用更小的 `topK` / `maxSpan`，尚未验证必要性；
+4. **预览新策略尚未完成全场景标定**：旧版实测预览匹配 P95 1696 ms（n=635）已超过 1 s 的预览周期。
+   本分支改为最近 12 秒单次前向、终稿仍用完整片段，`topK` / `maxSpan` 沿用相同配置。
+   新版第 12 章约 452 秒局部试播的“最新音频块→转写/候选 UI 帧”P95 为 972 ms（n=384），
+   但与旧版匹配耗时口径不同；预览候选对终稿的范围重叠率仍需人工标注和更多真机样本。见[局部实测证据](evidence/live-three-column-android-2026-09-23.md)；
 5. **未匹配的分层归因缺失**：预览层的未匹配片段中，多少是库外内容
    （求护词、解说、其它章节）、多少是拾音质量导致，尚未分开统计；
-6. **真机延迟只有单轮样本**：P50/P95 来自首轮 33 分钟播放，
-   未在其它设备或其它拾音条件下复测，也尚未确定延迟验收阈值。
+6. **真机延迟样本仍有限**：旧版 P50/P95 来自首轮 33 分钟播放；新版仅有第 12 章约 452 秒局部试播，
+   且两轮计时口径不同。尚未在其它设备、其它拾音条件下复测完整端到端延迟。
 
 真机验收矩阵与记录位置见 [真机验收记录](device-verification.md)。

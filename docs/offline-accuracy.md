@@ -35,7 +35,7 @@
 |------|-------------|------------------------------|------|
 | 主机 | macOS + ORT 1.22（`host_ort_server.py`，仅 `127.0.0.1`） | 命中推理缓存，不作为性能口径 | [offline-accuracy-host.json](evidence/offline-accuracy-host.json) |
 | Android 真机 | Redmi 24117RK2CC / Android 16 / arm64-v8a，debug 包 + 无头验收入口 | 0.88 s / 2.65 s / 4.88 s | [offline-accuracy-android.json](evidence/offline-accuracy-android.json) |
-| iOS 真机 | iPhone 17 Pro（iPhone18,1）/ iOS 26.6，release 包 + 无头验收入口 | 0.57 s / 1.74 s / 3.27 s | [offline-accuracy-ios.json](evidence/offline-accuracy-ios.json) / [控制台日志](evidence/offline-accuracy-ios-console.txt) |
+| iOS 真机 | iPhone 17 Pro（iPhone18,1）/ iOS 26.6，release 包 + 无头验收入口 | 0.57 s / 1.74 s / 3.27 s | [offline-accuracy-ios.json](evidence/offline-accuracy-ios.json)；原始控制台日志仅本地留存 |
 
 关键一致性：
 

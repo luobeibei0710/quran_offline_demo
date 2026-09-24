@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_decoder.dart';
-import 'package:quran_offline_demo/quran_offline/timed_transcript.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_decoder.dart';
+import 'package:quran_broadcast_sdk/quran_offline/timed_transcript.dart';
 
 void main() {
   const vocab = {1: '▁الله', 2: '▁الرحمن', 3: '▁الرحيم', 4: '▁الرح'};

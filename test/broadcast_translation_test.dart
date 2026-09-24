@@ -1,23 +1,32 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/broadcast/application/translation_coordinator.dart';
-import 'package:quran_offline_demo/broadcast/data/app_database.dart';
-import 'package:quran_offline_demo/broadcast/data/broadcast_corpus.dart';
-import 'package:quran_offline_demo/broadcast/data/record_repository.dart';
-import 'package:quran_offline_demo/broadcast/domain/utterance_record.dart';
-import 'package:quran_offline_demo/broadcast/translation/offline_translation_engine.dart';
-import 'package:quran_offline_demo/broadcast/translation/verse_translation_repository.dart';
+import 'package:quran_broadcast_sdk/broadcast/application/translation_coordinator.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/app_database.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/broadcast_corpus.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/record_repository.dart';
+import 'package:quran_broadcast_sdk/broadcast/domain/utterance_record.dart';
+import 'package:quran_broadcast_sdk/broadcast/translation/offline_translation_engine.dart';
+import 'package:quran_broadcast_sdk/broadcast/translation/verse_translation_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// 假翻译引擎：记录请求，按脚本返回成功或分类失败。
 class _FakeEngine implements OfflineTranslationEngine {
-  _FakeEngine({this.failure, this.status = TranslationEngineStatus.ready});
+  _FakeEngine({
+    this.failure,
+    this.status = TranslationEngineStatus.ready,
+    this.translationGate,
+  });
 
   final TranslationException? failure;
   TranslationEngineStatus status;
+  final Completer<void>? translationGate;
 
   static const String engineVersion = 'fake/1';
 
   final List<TranslationRequest> requests = <TranslationRequest>[];
+  int activeCalls = 0;
+  int maxActiveCalls = 0;
   @override
   int generation = 1;
   bool closed = false;
@@ -26,7 +35,8 @@ class _FakeEngine implements OfflineTranslationEngine {
   String get engineId => engineVersion;
 
   @override
-  Future<TranslationEngineStatus> statusFor(TargetLanguage target) async => status;
+  Future<TranslationEngineStatus> statusFor(TargetLanguage target) async =>
+      status;
 
   @override
   Future<TranslationEngineStatus> prepare({
@@ -37,14 +47,21 @@ class _FakeEngine implements OfflineTranslationEngine {
   @override
   Future<TranslationResult> translate(TranslationRequest request) async {
     requests.add(request);
-    final error = failure;
-    if (error != null) throw error;
-    return TranslationResult(
-      text: '译:${request.inputText}',
-      provider: 'mlkit',
-      engineId: engineVersion,
-      elapsedMs: 12,
-    );
+    activeCalls++;
+    if (activeCalls > maxActiveCalls) maxActiveCalls = activeCalls;
+    try {
+      await translationGate?.future;
+      final error = failure;
+      if (error != null) throw error;
+      return TranslationResult(
+        text: '译:${request.inputText}',
+        provider: 'mlkit',
+        engineId: engineVersion,
+        elapsedMs: 12,
+      );
+    } finally {
+      activeCalls--;
+    }
   }
 
   @override
@@ -55,10 +72,15 @@ class _FakeEngine implements OfflineTranslationEngine {
 
 /// 假校订译本仓储。
 class _FakeEditions implements VerseTranslationRepository {
-  _FakeEditions({this.edition, this.entries = const <String, String>{}});
+  _FakeEditions({
+    this.edition,
+    this.entries = const <String, String>{},
+    this.lookupError,
+  });
 
   final String? edition;
   final Map<String, String> entries;
+  final Object? lookupError;
 
   @override
   String? editionIdFor(TargetLanguage language) => edition;
@@ -68,6 +90,7 @@ class _FakeEditions implements VerseTranslationRepository {
     required String verseKey,
     required TargetLanguage language,
   }) async {
+    if (lookupError case final error?) throw error;
     final text = entries['${language.id}:$verseKey'];
     if (text == null) return null;
     return VerseTranslation(
@@ -137,16 +160,17 @@ void main() {
     ),
   );
 
-  MatchedVerse verse(int surah, int ayah, {int? wordStart, int? wordEnd}) => MatchedVerse(
-    ordinal: 0,
-    surah: surah,
-    ayah: ayah,
-    wordStart: wordStart,
-    wordEnd: wordEnd,
-    canonicalTextSnapshot: library.verse(surah, ayah)!.textUthmani,
-    matchedTextSnapshot: 'مطابق',
-    corpusVersion: library.manifest.corpusVersion,
-  );
+  MatchedVerse verse(int surah, int ayah, {int? wordStart, int? wordEnd}) =>
+      MatchedVerse(
+        ordinal: 0,
+        surah: surah,
+        ayah: ayah,
+        wordStart: wordStart,
+        wordEnd: wordEnd,
+        canonicalTextSnapshot: library.verse(surah, ayah)!.textUthmani,
+        matchedTextSnapshot: 'مطابق',
+        corpusVersion: library.manifest.corpusVersion,
+      );
 
   TranslationCoordinator coordinatorWith(
     _FakeEngine engine, {
@@ -159,6 +183,43 @@ void main() {
   );
 
   group('来源策略', () {
+    test('预览返回校订译本来源与上下文范围，不调用机翻', () async {
+      final engine = _FakeEngine();
+      final coordinator = coordinatorWith(
+        engine,
+        editions: _FakeEditions(
+          edition: 'test-zh',
+          entries: const <String, String>{'chinese:112:1': '说：他是真主，是独一的主'},
+        ),
+      );
+      final result = await coordinator.translatePreview(
+        matches: <MatchedVerse>[verse(112, 1, wordStart: 4, wordEnd: 6)],
+        asrText: 'قل هو الله',
+        language: TargetLanguage.chinese,
+      );
+      expect(result?.text, '说：他是真主，是独一的主');
+      expect(result?.sourceKind, TranslationSourceKind.curatedEdition);
+      expect(result?.inputScope, 'fullVerseContext');
+      expect(result?.editionLabel, contains('测试译者'));
+      expect(engine.requests, isEmpty);
+    });
+
+    test('预览译本解析失败时返回空结果，等待态可被控制器清除', () async {
+      final coordinator = coordinatorWith(
+        _FakeEngine(),
+        editions: _FakeEditions(
+          edition: 'test-zh',
+          lookupError: StateError('坏译本'),
+        ),
+      );
+      final result = await coordinator.translatePreview(
+        matches: <MatchedVerse>[verse(112, 1)],
+        asrText: 'قل هو الله احد',
+        language: TargetLanguage.chinese,
+      );
+      expect(result, isNull);
+    });
+
     test('未匹配：翻译实际 ASR 转写，来源为 machineAsr', () async {
       final engine = _FakeEngine();
       final coordinator = coordinatorWith(engine);
@@ -167,13 +228,20 @@ void main() {
         status: MatchStatus.unmatched,
         scope: RecordScope.unknown,
       );
-      final status = await coordinator.runJob((await records.pendingJobs()).single);
+      final status = await coordinator.runJob(
+        (await records.pendingJobs()).single,
+      );
       expect(status, TranslationStatus.done);
 
-      final input = await coordinator.resolveInput(record, TargetLanguage.chinese);
+      final input = await coordinator.resolveInput(
+        record,
+        TargetLanguage.chinese,
+      );
       expect(input.sourceKind, TranslationSourceKind.machineAsr);
       expect(input.text, 'هذا كلام عادي');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.machineAsr);
       expect(translation.status, TranslationStatus.done);
       expect(translation.text, startsWith('译:'));
@@ -194,7 +262,9 @@ void main() {
       // 输入必须是新库标准原文（保留音标），不是归一化后的 ASR 文本。
       expect(request.inputText, library.verse(112, 1)!.textUthmani);
       expect(request.inputText, isNot(QuranTextNormalized.ikhlas1));
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.machineCanonical);
     });
 
@@ -218,7 +288,9 @@ void main() {
           .toList();
       expect(request.inputText, words.sublist(4, 7).join(' '));
       expect(request.inputText, isNot(library.verse(112, 1)!.textUthmani));
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.inputScope, 'confirmedRange');
     });
 
@@ -234,14 +306,18 @@ void main() {
         scope: RecordScope.partialVerse,
         status: MatchStatus.partial,
       );
-      final status = await coordinator.runJob((await records.pendingJobs()).single);
+      final status = await coordinator.runJob(
+        (await records.pendingJobs()).single,
+      );
       expect(status, TranslationStatus.done);
 
       // 关键：有权威译本时不得落到机器翻译。
       // 实机上这里曾退化成 ML Kit 对古兰经阿拉伯语的输出（重复词乱码），
       // 而 status 仍是 done，用户看到的是一段看似成功的垃圾。
       expect(engine.requests, isEmpty, reason: '有授权译本时不得调用机器翻译');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.curatedEdition);
       expect(
         translation.inputScope,
@@ -267,7 +343,9 @@ void main() {
       // candidate 的 isMatched 为 false，旧逻辑据此走 machineAsr；实机 11 条记录里
       // 有候选的却全部落到机器翻译。判据改为「有没有匹配到节」。
       expect(engine.requests, isEmpty, reason: '有候选节时不得调用机器翻译');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.curatedEdition);
     });
 
@@ -279,11 +357,15 @@ void main() {
       );
       final coordinator = coordinatorWith(engine, editions: editions);
       final record = await saveRecord(matches: <MatchedVerse>[verse(112, 1)]);
-      final status = await coordinator.runJob((await records.pendingJobs()).single);
+      final status = await coordinator.runJob(
+        (await records.pendingJobs()).single,
+      );
 
       expect(status, TranslationStatus.done);
       expect(engine.requests, isEmpty, reason: '命中校订译本不得再调用机器翻译');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.sourceKind, TranslationSourceKind.curatedEdition);
       expect(translation.text, '说：他是真主，是独一的主');
       expect(translation.editionId, 'test-zh');
@@ -294,12 +376,17 @@ void main() {
   group('失败与重试', () {
     test('缺语言包时保留记录并标记可重试', () async {
       final engine = _FakeEngine(
-        failure: const TranslationException(TranslationErrorCode.modelMissing, '缺少语言包'),
+        failure: const TranslationException(
+          TranslationErrorCode.modelMissing,
+          '缺少语言包',
+        ),
         status: TranslationEngineStatus.missing,
       );
       final coordinator = coordinatorWith(engine);
       final record = await saveRecord(matches: <MatchedVerse>[verse(112, 1)]);
-      final status = await coordinator.runJob((await records.pendingJobs()).single);
+      final status = await coordinator.runJob(
+        (await records.pendingJobs()).single,
+      );
 
       expect(status, TranslationStatus.modelMissing);
       final reloaded = (await records.byId(record.id))!;
@@ -313,7 +400,10 @@ void main() {
 
     test('翻译失败后同一记录可重试，且不新增历史', () async {
       final failing = _FakeEngine(
-        failure: const TranslationException(TranslationErrorCode.translateFailed, '引擎异常'),
+        failure: const TranslationException(
+          TranslationErrorCode.translateFailed,
+          '引擎异常',
+        ),
       );
       final coordinator = coordinatorWith(failing);
       final record = await saveRecord(matches: <MatchedVerse>[verse(112, 1)]);
@@ -322,10 +412,15 @@ void main() {
 
       final recovered = _FakeEngine();
       final retryCoordinator = coordinatorWith(recovered);
-      final ok = await retryCoordinator.retry(record.id, TargetLanguage.chinese);
+      final ok = await retryCoordinator.retry(
+        record.id,
+        TargetLanguage.chinese,
+      );
       expect(ok, isTrue);
       expect(await records.count(), 1, reason: '重试不得新建记录');
-      final translation = (await records.byId(record.id))!.translationFor(TargetLanguage.chinese)!;
+      final translation = (await records.byId(
+        record.id,
+      ))!.translationFor(TargetLanguage.chinese)!;
       expect(translation.status, TranslationStatus.done);
       expect(translation.text, startsWith('译:'));
     });
@@ -343,6 +438,43 @@ void main() {
   });
 
   group('缓存与幂等', () {
+    test('预览与终稿同时请求机翻时原生引擎仍串行', () async {
+      final gate = Completer<void>();
+      final engine = _FakeEngine(translationGate: gate);
+      final coordinator = coordinatorWith(engine);
+      await saveRecord(matches: <MatchedVerse>[verse(112, 1)]);
+      final preview = coordinator.translatePreview(
+        matches: <MatchedVerse>[verse(112, 1)],
+        asrText: 'قل هو الله احد',
+        language: TargetLanguage.chinese,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(engine.requests, hasLength(1));
+      final finalDrain = coordinator.drain();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(engine.requests, hasLength(1), reason: '正式任务应等待当前预览翻译释放引擎');
+      gate.complete();
+      await preview;
+      await finalDrain;
+      expect(engine.maxActiveCalls, 1);
+      expect(engine.requests, hasLength(1), reason: '同一输入的预览与终稿应复用在途翻译');
+    });
+
+    test('并发 drain 只执行一次待办任务', () async {
+      final gate = Completer<void>();
+      final engine = _FakeEngine(translationGate: gate);
+      final coordinator = coordinatorWith(engine);
+      await saveRecord(matches: <MatchedVerse>[verse(112, 1)]);
+      final first = coordinator.drain();
+      final second = coordinator.drain();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(engine.requests, hasLength(1));
+      gate.complete();
+      await Future.wait(<Future<int>>[first, second]);
+      expect(engine.requests, hasLength(1));
+      expect(await records.pendingJobs(), isEmpty);
+    });
+
     test('相同输入命中缓存，不重复调用引擎', () async {
       final engine = _FakeEngine();
       final coordinator = coordinatorWith(engine);
@@ -362,8 +494,14 @@ void main() {
       await coordinator.runJob((await records.pendingJobs()).single);
       expect(engine.requests, hasLength(1), reason: '同一输入应命中缓存');
 
-      expect((await records.byId(first.id))!.translationFor(TargetLanguage.chinese), isNotNull);
-      expect((await records.byId(second.id))!.translationFor(TargetLanguage.chinese), isNotNull);
+      expect(
+        (await records.byId(first.id))!.translationFor(TargetLanguage.chinese),
+        isNotNull,
+      );
+      expect(
+        (await records.byId(second.id))!.translationFor(TargetLanguage.chinese),
+        isNotNull,
+      );
     });
 
     test('缓存键包含语料版本、语言、提供方与预处理版本', () async {

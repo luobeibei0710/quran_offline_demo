@@ -22,8 +22,8 @@
 └───────────────────────────────────┬──────────────────────────────────────────┘
                                     │ 纯 Dart 算法（Android / iOS 共用）
 ┌───────────────────────────────────▼──────────────────────────────────────────┐
-│ 算法层  lib/quran_offline/                                                    │
-│   CTC 解码 · 前向后向打分 · 召回精排 · 词级对齐 · WER · WAV 解码 · 归一化        │
+│ 算法层  packages/quran_broadcast_sdk/lib/quran_offline/                      │
+│   CTC 解码 · 前向后向打分 · 召回精排 · 词级对齐 · WER · 归一化                 │
 └───────────────────────────────────┬──────────────────────────────────────────┘
                                     │ MethodChannel `quran_offline/ort`
 ┌───────────────────────────────────▼──────────────────────────────────────────┐
@@ -43,7 +43,8 @@ iOS 侧用 `dispatch_once` 单例加 `@synchronized(self)`。这不是实现偷�
 
 ## 2. 依赖组装
 
-所有依赖在 `BroadcastServices.bootstrap()` 里创建一次，由应用级单实例持有；
+所有依赖在 SDK 的 `BroadcastServices.bootstrap()` 里创建一次，由应用级单实例持有；
+对外通过 `QuranBroadcastSdk.initialize()` 和 `dispose()` 管理，
 **页面不得直接操作 ORT、下载模型或执行 SQL**。
 
 ```
@@ -70,7 +71,7 @@ session.refreshHistory()              载入历史计数与最近 10 条
 |--------------|--------------------|
 | ASR 模型 `fastconformer_full_mixed_ort122.onnx` | 旧经文库 `assets/quran_offline/quran.json` |
 | 词表 `vocab.json` | 旧 span 表 `quran_ctc_tokens.json` |
-| `quran_offline/` 下的纯 Dart 算法（解码、打分、对齐、指标、WAV 解码） | 旧语料的任何运行时索引 |
+| SDK `lib/quran_offline/` 下的纯 Dart 算法（解码、打分、对齐、指标） | 旧语料的任何运行时索引 |
 
 隔离由测试保证：`test/broadcast_corpus_test.dart` 用一个记录全部资产请求的 bundle
 加载广播语料库，断言期间**没有任何请求命中旧库文件**。
@@ -84,27 +85,29 @@ UtteranceSegmenter.addChunk
    ├─ 未结束时返回 null（继续累积）
    ├─ 静音 ≥ 1.2 s 且片段 ≥ 0.8 s → takeOnSilence()
    └─ 片段 ≥ 30 s                  → takeOnMaxDuration()（保留 1 s 重叠）
-   ↓ BroadcastFragment（音频 + 起止采样点 + 边界原因）
+   ↓ SpeechSegment（音频 + 起止采样点 + 边界原因）
 BroadcastSessionController
    ├─ 终稿队列（上限 3，超载丢最旧并计数）
-   └─ 预览节流（每 1 s 一次，可被终稿抢占）
+   └─ 最短 1 s 一次预览请求（只合并保留最新，终稿优先）
    ↓
-BroadcastTranscriber.transcribe
-   ├─ OfflineTranscriber 按声学暂停切段（保 ASR 准确度）
-   ├─ 逐段 runner.run → TextCtcDecoder.decode
-   └─ matchEvidence：单段时复用该段证据；多段时对整段音频再跑一次前向
-   ↓
-QuranMatchService.match → BroadcastMatchOutcome
-   ↓
-RecordRepository.save（同事务写记录 + 匹配 + 指标 + 翻译任务）
-   ↓
-TranslationCoordinator.drain（后台处理任务，不阻塞界面）
+   ├─ 预览：最近最多 12 s → BroadcastTranscriber.transcribePreview
+   │          → 一次 runner.run，同时供 CTC 解码与匹配复用
+   │          → QuranMatchService.match → BroadcastPreview（三栏同一快照，不落库）
+   │          → 候选稳定后 TranslationCoordinator.translatePreview（校验片段与候选版本）
+   └─ 终稿：完整片段 → BroadcastTranscriber.transcribe
+              ├─ OfflineTranscriber 按声学暂停切段（保 ASR 准确度）
+              ├─ 逐段 runner.run → TextCtcDecoder.decode
+              └─ matchEvidence：单段复用证据；多段整段再跑一次前向
+              → QuranMatchService.match → BroadcastMatchOutcome
+              → RecordRepository.save（同事务写记录 + 匹配 + 指标 + 翻译任务）
+              → TranslationCoordinator.drain（后台串行处理任务，不阻塞界面）
 ```
 
-`matchEvidence` 的那次额外前向是**必要的**：转写按声学暂停把长片段切成 3–10 s 的子窗
+终稿 `matchEvidence` 的那次额外前向是**必要的**：转写按声学暂停把长片段切成 3–10 s 的子窗
 （为了 ASR 更准），而 CTC 打分要求候选满足 `token 数 × 2 + 1 ≤ 帧数`，
 逐子窗做匹配会让跨多节的正确候选因帧数不足被判「不可行」而直接跳过。
 因此匹配改用整段音频的原生证据，这次推理不服务转写，只为给匹配提供足够帧数。
+预览窗口只表示最近一段音频的候选，不替代终稿完整片段的裁决。
 
 ## 4. 会话状态与并发约束
 
@@ -112,13 +115,13 @@ TranslationCoordinator.drain（后台处理任务，不阻塞界面）
 
 | 约束 | 取值 / 行为 |
 |------|-------------|
-| 单模型串行 | 预览与终稿共享同一个推理桥，互相排斥 |
-| 终稿优先 | 队列里有终稿时先处理终稿，预览让路 |
+| 单模型串行 | 一个工作泵串行处理预览与终稿，共享同一个推理桥 |
+| 终稿优先 | 队列里有终稿时先处理终稿；预览请求合并为最新一份，不积压旧窗口 |
 | 终稿队列上限 | 3 条；超载丢弃最旧的一条并计数提示，不无限积压 |
 | 停止幂等 | 先停采样 → 等在途推理结束 → `segmenter.flush()` → drain → 打印本次保存条数 |
 | 语言切换 | 仅在空闲允许；识别中禁用并给出提示，避免一句话中途混语言 |
 | 目标语言冻结 | 记录创建时写入 `target_language`，后续切换不影响历史记录 |
-| 预览译文 | 候选连续两次一致才触发翻译，结果进内存 memo 与 `translation_cache`，不写记录行 |
+| 预览译文 | 经文引用连续两次一致才触发翻译；结果须与会话、片段、节内范围及语言一致，过期结果丢弃；不写记录行 |
 | 内存边界 | 音频缓冲与推理队列都有界，不累积整场录音 |
 
 ## 5. 数据模型
@@ -152,7 +155,7 @@ SQLite，库文件 `broadcast_quran.db` 位于**应用支持目录**（非缓存
 
 ## 6. 领域模型与状态枚举
 
-`lib/broadcast/domain/utterance_record.dart` 集中定义：
+`packages/quran_broadcast_sdk/lib/broadcast/domain/utterance_record.dart` 集中定义：
 
 | 类型 | 取值 | 含义 |
 |------|------|------|

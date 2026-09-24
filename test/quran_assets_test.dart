@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 
 import 'support/quran_test_fixtures.dart';
 

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/word_error_rate.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_error_rate.dart';
 
 void main() {
   test('strict WER counts substitution, missing words and actual repetitions', () {

@@ -21,8 +21,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:quran_offline_demo/quran_offline/quran_text.dart';
-import 'package:quran_offline_demo/quran_offline/word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_text.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
 
 /// 太斯米（归一化词形，与经文库 `text_clean` 一致）。
 const List<String> _bismillah = <String>['بسم', 'الله', 'الرحمن', 'الرحيم'];

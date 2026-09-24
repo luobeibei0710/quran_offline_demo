@@ -13,12 +13,12 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'ctc_decoder.dart';
-import 'ort_runner.dart';
-import 'quran_assets.dart';
-import 'quran_matcher.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_decoder.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ort_runner.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_matcher.dart';
 import 'quran_word_progress.dart';
-import 'timed_transcript.dart';
+import 'package:quran_broadcast_sdk/quran_offline/timed_transcript.dart';
 
 /// 一次识别的输出事件。
 class QuranRecognitionEvent {

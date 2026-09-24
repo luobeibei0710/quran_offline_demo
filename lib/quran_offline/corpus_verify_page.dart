@@ -18,13 +18,13 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'corpus_audio.dart';
 import 'corpus_catalog.dart';
 import 'corpus_runner.dart';
-import 'offline_transcriber.dart';
-import 'quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/offline_transcriber.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 import 'quran_compare_page.dart';
 import 'quran_recognizer.dart';
 import 'reference_text.dart';
-import 'word_alignment.dart';
-import 'word_error_rate.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_error_rate.dart';
 
 /// 一条语料的加载结果。
 class _CorpusEntry {

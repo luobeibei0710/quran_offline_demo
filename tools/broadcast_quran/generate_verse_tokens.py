@@ -24,9 +24,9 @@ Usage:
 
     # build the full-corpus table shipped with the app
     python3 tools/broadcast_quran/generate_verse_tokens.py \
-        --verses assets/broadcast_quran/full/quran.json \
+        --verses packages/quran_broadcast_sdk/assets/broadcast_quran/full/quran.json \
         --vocab assets/quran_offline/vocab.json \
-        --output assets/broadcast_quran/full/verse_ctc_tokens.json \
+        --output packages/quran_broadcast_sdk/assets/broadcast_quran/full/verse_ctc_tokens.json \
         --max-span 8
 """
 
@@ -304,7 +304,7 @@ def main() -> int:
     parser.add_argument("--strategy", default="min-token", choices=("min-token", "greedy"))
     parser.add_argument(
         "--verses",
-        default=str(REPO_ROOT / "assets" / "broadcast_quran" / "full" / "quran.json"),
+        default=str(REPO_ROOT / "packages" / "quran_broadcast_sdk" / "assets" / "broadcast_quran" / "full" / "quran.json"),
     )
     parser.add_argument(
         "--vocab", default=str(REPO_ROOT / "assets" / "quran_offline" / "vocab.json")

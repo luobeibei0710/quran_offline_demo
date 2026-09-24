@@ -35,7 +35,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_TXT = REPO_ROOT / "resources" / "broadcast_quran" / "tanzil_1_1" / "quran-uthmani.txt"
 NOTICE_TXT = REPO_ROOT / "resources" / "broadcast_quran" / "tanzil_1_1" / "NOTICE.txt"
-OUTPUT_DIR = REPO_ROOT / "assets" / "broadcast_quran" / "full"
+OUTPUT_DIR = REPO_ROOT / "packages" / "quran_broadcast_sdk" / "assets" / "broadcast_quran" / "full"
 CORPUS_ID = "tanzil-1.1-uthmani-full"
 CHAPTERS_URL = "https://quran-json.risanb.com/chapters.json"
 USER_AGENT = "quran-offline-demo/1.0 (+tools/broadcast_quran/build_full_corpus.py)"

@@ -9,7 +9,7 @@
 /// （对应「窗口向前滑动但内容没变长」的情况）。
 library;
 
-import 'quran_text.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_text.dart';
 
 /// 连续转写稿的增量拼接器。
 class TranscriptStitcher {

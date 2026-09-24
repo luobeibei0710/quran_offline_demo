@@ -14,20 +14,20 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/services.dart';
-import 'ctc_scorer.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_scorer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import 'corpus_verify_page.dart';
-import 'ort_runner.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ort_runner.dart';
 import 'offline_corpus_check.dart';
-import 'quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 import 'quran_compare_page.dart';
-import 'quran_matcher.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_matcher.dart';
 import 'quran_recognizer.dart';
 import 'reference_text.dart';
 import 'transcript_stitcher.dart';
-import 'word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
 
 /// 声学模型在 Flutter 资产中的路径（与 pubspec 声明一致）。
 ///

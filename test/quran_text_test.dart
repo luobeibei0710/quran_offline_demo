@@ -5,7 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/quran_text.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_text.dart';
 
 void main() {
   group('QuranText.normalize', () {

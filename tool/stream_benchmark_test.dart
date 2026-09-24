@@ -12,13 +12,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_offline_demo/quran_offline/corpus_audio.dart';
 import 'package:quran_offline_demo/quran_offline/corpus_catalog.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_scorer.dart';
-import 'package:quran_offline_demo/quran_offline/ort_runner.dart';
-import 'package:quran_offline_demo/quran_offline/quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_scorer.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ort_runner.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 import 'package:quran_offline_demo/quran_offline/quran_recognizer.dart';
-import 'package:quran_offline_demo/quran_offline/quran_text.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_text.dart';
 import 'package:quran_offline_demo/quran_offline/reference_text.dart';
-import 'package:quran_offline_demo/quran_offline/word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
 
 const _sampleRate = QuranRecognizer.sampleRate;
 const _expectedCases = <String, List<String>>{

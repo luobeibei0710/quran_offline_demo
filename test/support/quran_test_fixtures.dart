@@ -10,9 +10,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_scorer.dart';
-import 'package:quran_offline_demo/quran_offline/ort_runner.dart';
-import 'package:quran_offline_demo/quran_offline/quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_scorer.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ort_runner.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 
 /// 内存资产包：直接以字符串形式提供资产内容。
 ///

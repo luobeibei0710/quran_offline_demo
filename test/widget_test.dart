@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_offline_demo/main.dart';
-import 'package:quran_offline_demo/quran_offline/ort_runner.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ort_runner.dart';
 import 'package:quran_offline_demo/quran_offline/quran_offline_demo_page.dart';
 
 import 'support/quran_test_fixtures.dart';

@@ -7,12 +7,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_offline_demo/quran_offline/corpus_audio.dart';
 import 'package:quran_offline_demo/quran_offline/corpus_catalog.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_decoder.dart';
-import 'package:quran_offline_demo/quran_offline/offline_transcriber.dart';
-import 'package:quran_offline_demo/quran_offline/quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_decoder.dart';
+import 'package:quran_broadcast_sdk/quran_offline/offline_transcriber.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 import 'package:quran_offline_demo/quran_offline/reference_text.dart';
-import 'package:quran_offline_demo/quran_offline/word_alignment.dart';
-import 'package:quran_offline_demo/quran_offline/word_error_rate.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_error_rate.dart';
 
 import 'stream_benchmark_test.dart' show FileAssetBundle, HttpOrtRunner;
 

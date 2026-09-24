@@ -35,9 +35,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASE_URL = "https://quran-json.risanb.com"
-OUTPUT_DIR = REPO_ROOT / "assets" / "broadcast_quran" / "full" / "translations"
+OUTPUT_DIR = REPO_ROOT / "packages" / "quran_broadcast_sdk" / "assets" / "broadcast_quran" / "full" / "translations"
 CORPUS_ID = "tanzil-1.1-uthmani-full"
-CORPUS_VERSE_FILE = REPO_ROOT / "assets" / "broadcast_quran" / "full" / "quran.json"
+CORPUS_VERSE_FILE = REPO_ROOT / "packages" / "quran_broadcast_sdk" / "assets" / "broadcast_quran" / "full" / "quran.json"
 USER_AGENT = "quran-offline-demo/1.0 (+tools/broadcast_quran/fetch_translations.py)"
 TIMEOUT_SECONDS = 120
 

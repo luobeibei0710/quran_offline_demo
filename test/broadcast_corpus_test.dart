@@ -2,9 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/broadcast/data/broadcast_corpus.dart';
-import 'package:quran_offline_demo/quran_offline/quran_matcher.dart';
-import 'package:quran_offline_demo/quran_offline/quran_text.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/broadcast_corpus.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_matcher.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_text.dart';
 
 /// 记录所有资产请求，用来证明广播功能没有读取旧经文库。
 class _RecordingBundle extends CachingAssetBundle {
@@ -163,7 +164,7 @@ void main() {
           '${BroadcastQuranLibrary.assetDir}/verse_ctc_tokens.json',
         ]),
       );
-      expect(recorder.requested, contains('assets/quran_offline/vocab.json'));
+      expect(recorder.requested, contains(QuranAssets.vocabAssetKey));
     });
 
     test('注入全经索引的匹配器只在广播语料内检索', () async {

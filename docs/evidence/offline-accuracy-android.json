@@ -41,6 +41,6 @@
   ],
   "complete": true,
   "builtInSamples": "5/5",
-  "rawLog": "/tmp/quran-android-offline-20260920.log",
+  "rawLog": "local-only (not published)",
   "note": "Transcription text omitted from metric log to avoid Android log line limits; host full text is in offline-accuracy-host.json."
 }

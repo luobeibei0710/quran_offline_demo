@@ -1,11 +1,12 @@
 # Android 平台说明
 
-Android 侧的原生部分只有两项：**推理桥**与**通道注册**。
+Android 侧的推理桥与通道注册由 `quran_broadcast_sdk` 插件提供，消费应用无需修改 `MainActivity`。
 
 | 文件 | 职责 |
 |------|------|
-| `android/app/src/main/java/com/llvision/quran_offline_demo/QuranOrtBridge.java` | 单例 ORT 桥（`synchronized`，单线程 executor） |
-| `android/app/src/main/kotlin/com/llvision/quran_offline_demo/MainActivity.kt` | 注册 `quran_offline/ort` 通道（`loadModel` / `run` / `dispose`） |
+| `packages/quran_broadcast_sdk/android/src/main/java/com/llvision/quran_broadcast_sdk/QuranOrtBridge.java` | 单例 ORT 桥（`synchronized`） |
+| `packages/quran_broadcast_sdk/android/src/main/kotlin/com/llvision/quran_broadcast_sdk/QuranBroadcastSdkPlugin.kt` | 自动注册 `quran_offline/ort` 与 `quran_offline/screen` 通道，串行执行推理 |
+| `packages/quran_broadcast_sdk/android/build.gradle` | 固定 ORT 1.22.0 与 Java/Kotlin 17 |
 
 ## 1. 构建配置
 
@@ -13,10 +14,11 @@ Android 侧的原生部分只有两项：**推理桥**与**通道注册**。
 |----|-----|
 | `applicationId` / `namespace` | `com.llvision.quran_offline_demo` |
 | `minSdk` | 26 |
-| `compileSdk` / `targetSdk` | 随 Flutter 默认 |
+| 插件 `compileSdk` | 36（消费工程需安装 Android SDK Platform 36） |
+| 宿主 `compileSdk` / `targetSdk` | 随宿主 Flutter 模板；本仓库使用 36 |
 | NDK | `29.0.14206865`（显式指定，见下） |
 | Java / Kotlin | 17 |
-| 依赖 | `com.microsoft.onnxruntime:onnxruntime-android:1.22.0` |
+| 依赖 | 插件声明 `com.microsoft.onnxruntime:onnxruntime-android:1.22.0` |
 | 权限 | `android.permission.RECORD_AUDIO`（唯一运行时权限） |
 
 NDK 版本显式指定是因为它直接影响推理是否可用：**必须与离线基准验证过的版本一致**，
@@ -45,9 +47,15 @@ adb logcat -d | grep -E "QuranOrtBridge|\[Broadcast\]|QuranDemo|QuranCorpus"
 |------|------|
 | `pm clear` | 拒绝 |
 | `pm grant` | 拒绝 |
-| `input tap` | 拒绝（应用无 `INJECT_EVENTS` 权限） |
+| `input tap` / `input keyevent`（含 26/126/224） | 拒绝（应用无 `INJECT_EVENTS` 权限） |
+| `settings put global` / `system` / `secure` | 拒绝（无 `WRITE_SECURE_SETTINGS`） |
+| `service call power …`（远程点亮屏幕） | 拒绝（无 `DEVICE_POWER`） |
+| `cmd media_session dispatch play`（让系统播放器开播） | 可拉起 `com.miui.player`，但 `PlaybackState` 停在 `NONE(0)`，不会真正播放 |
 
-因此**页面自动化点击在 Android 上不可用**，无人值守验证只能靠编译期开关：
+因此**页面自动化点击在 Android 上不可用**，无人值守验证只能靠编译期开关。
+此外，息屏会让应用退到后台，而 Android 9 起后台 UID 的麦克风被 `audioserver` 静音——
+实测此时 `MicrophoneCaptureSource` 拿到的 PCM **RMS 与 peak 均为 0.0000**，
+预览全部退化为未匹配。所以**超过几分钟的连续收音必须有人在设备旁保持亮屏**。
 
 | 开关 | 默认 | 作用 |
 |------|------|------|
@@ -55,6 +63,9 @@ adb logcat -d | grep -E "QuranOrtBridge|\[Broadcast\]|QuranDemo|QuranCorpus"
 | `--dart-define=quran_auto_stop_seconds=160` | 0 | 到点自动停止识别并输出一行 `比对预览`（0 = 不停） |
 | `--dart-define=quran_auto_corpus=true` | false | 加载完成后自动进入语料页并跑默认离线校核 |
 | `--dart-define=quran_headless_corpus=true` | false | 无界面验收入口（不依赖渲染帧），打印 `OFFLINE_RESULT` / `OFFLINE_COMPLETE` |
+| `--dart-define=quran_auto_run_seconds=2100` | 0 | 广播首页：依赖就绪后自动开麦，到点自动停止（仅 Debug 包），期间阻止息屏 |
+| `--dart-define=quran_dump_pcm=true` | false | 把麦克风 PCM16 写入应用私有外部目录 `mic_<ts>.pcm`，上限 200 MB |
+| `--dart-define=quran_latency_trace=true` | false | 输出 `[BroadcastLatencyTrace]` 结构化时延事件 |
 
 普通交付包不带任何上述开关。
 

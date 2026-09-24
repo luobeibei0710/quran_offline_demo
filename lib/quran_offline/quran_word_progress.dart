@@ -12,8 +12,8 @@
 /// 内容）后升（多出的 token 缺乏声学证据），取「分数在最优值容差内的最长前缀」。
 library;
 
-import 'ctc_scorer.dart';
-import 'quran_assets.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_scorer.dart';
+import 'package:quran_broadcast_sdk/quran_offline/quran_assets.dart';
 
 /// 已读进度的帧级结果。
 class QuranReadProgress {

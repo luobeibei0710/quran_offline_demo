@@ -14,8 +14,8 @@ library;
 import 'package:flutter/material.dart';
 
 import 'reference_text.dart';
-import 'word_alignment.dart';
-import 'word_error_rate.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_error_rate.dart';
 
 /// 原文与转写的逐词比对页。
 class QuranComparePage extends StatefulWidget {

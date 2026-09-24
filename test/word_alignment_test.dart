@@ -2,7 +2,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/quran_offline/word_alignment.dart';
+import 'package:quran_broadcast_sdk/quran_offline/word_alignment.dart';
 
 void main() {
   group('WordAlignment.align', () {

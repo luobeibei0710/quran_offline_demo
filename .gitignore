@@ -50,9 +50,27 @@ app.*.map.json
 # Android local config / signing material
 /android/local.properties
 /android/.gradle/
+/android/.kotlin/
 /android/key.properties
 *.jks
 *.keystore
+
+# Public-repository boundary: local credentials and signing material.
+.env
+.env.*
+!.env.example
+!.env.sample
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+google-services.json
+GoogleService-Info.plist
+**/xcuserdata/
+*.xcuserstate
 
 # iOS / macOS build & dependency artifacts
 /ios/Pods/
@@ -60,6 +78,44 @@ app.*.map.json
 /ios/Flutter/Flutter.framework
 /ios/Flutter/Flutter.podspec
 **/Podfile.lock
+/packages/quran_broadcast_sdk/pubspec.lock
+
+# Built artifacts and local application data.
+*.apk
+*.aab
+*.ipa
+*.xcarchive/
+*.xcresult/
+*.dSYM/
+*.hprof
+*.crash
+*.ips
+*.xcactivitylog
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Model weights and recorded or downloaded audio are local inputs, not source.
+*.onnx
+*.tflite
+*.pt
+*.pth
+*.safetensors
+*.pcm
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.caf
+
+# Device console captures and raw recognition events stay local. Aggregate,
+# reviewed metrics (.json/.csv) and redacted reports (.md) may be committed.
+/docs/evidence/*.txt
+/docs/evidence/*.log
+/docs/evidence/*.jsonl
 
 # 古兰经离线识别资产（约 99 MB，不入版本库）
 # 获取方式：bash tools/quran_offline/download_assets.sh

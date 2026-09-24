@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/broadcast/data/translation_catalog.dart';
-import 'package:quran_offline_demo/broadcast/domain/utterance_record.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/translation_catalog.dart';
+import 'package:quran_broadcast_sdk/broadcast/domain/utterance_record.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

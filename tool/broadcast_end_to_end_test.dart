@@ -24,13 +24,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quran_offline_demo/broadcast/application/broadcast_transcriber.dart';
-import 'package:quran_offline_demo/broadcast/application/quran_match_service.dart';
-import 'package:quran_offline_demo/broadcast/data/broadcast_corpus.dart';
-import 'package:quran_offline_demo/broadcast/data/translation_catalog.dart';
-import 'package:quran_offline_demo/broadcast/domain/utterance_record.dart';
+import 'package:quran_broadcast_sdk/broadcast/application/broadcast_transcriber.dart';
+import 'package:quran_broadcast_sdk/broadcast/application/quran_match_service.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/broadcast_corpus.dart';
+import 'package:quran_broadcast_sdk/broadcast/data/translation_catalog.dart';
+import 'package:quran_broadcast_sdk/broadcast/domain/utterance_record.dart';
 import 'package:quran_offline_demo/quran_offline/corpus_audio.dart';
-import 'package:quran_offline_demo/quran_offline/ctc_decoder.dart';
+import 'package:quran_broadcast_sdk/quran_offline/ctc_decoder.dart';
 
 import 'stream_benchmark_test.dart' show FileAssetBundle, HttpOrtRunner;
 
